@@ -13,6 +13,11 @@ import {
   type OrganizationSnapshot,
 } from "../OrganizationMemory";
 
+import {
+  organizationInsights,
+  type OrganizationInsightsResult,
+} from "../organization";
+
 import type {
   DecisionResponse,
 } from "../DecisionCore";
@@ -24,6 +29,7 @@ import type {
 export type OvernightExecutiveResult = {
   departmentReview: DepartmentReviewResult;
   organizationSnapshot: OrganizationSnapshot;
+  organizationInsights: OrganizationInsightsResult;
   executiveReview: ExecutiveReview;
 };
 
@@ -44,6 +50,11 @@ export class OvernightExecutive {
         departmentReview.reports,
       );
 
+    const insights =
+      organizationInsights.analyze(
+        organizationSnapshot,
+      );
+
     const executiveReview =
       executiveBrain.review({
         decision:
@@ -59,6 +70,8 @@ export class OvernightExecutive {
     return {
       departmentReview,
       organizationSnapshot,
+      organizationInsights:
+        insights,
       executiveReview,
     };
   }

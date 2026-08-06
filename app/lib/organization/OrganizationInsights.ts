@@ -1,5 +1,6 @@
 import type {
   DepartmentName,
+  DepartmentStatus,
 } from "../Department";
 
 import type {
@@ -10,13 +11,19 @@ import type {
 export type DepartmentInsight = {
   department: DepartmentName;
 
+  status: DepartmentStatus;
+
   healthScore: number;
+
+  healthChange: number;
 
   trend:
     | "improving"
     | "stable"
     | "declining"
     | "unknown";
+
+  confidence: number;
 
   priority: number;
 
@@ -29,6 +36,12 @@ export type DepartmentInsight = {
   requiresOwnerAttention: boolean;
 
   canOperateAutomatically: boolean;
+
+  ownerDecisionCount: number;
+
+  kaiWorkCount: number;
+
+  missingInformationCount: number;
 };
 
 export type OrganizationInsightsResult = {
@@ -52,6 +65,10 @@ export type OrganizationInsightsResult = {
     | DepartmentInsight
     | null;
 
+  highestPriorityDepartment:
+    | DepartmentInsight
+    | null;
+
   ownerAttention: DepartmentInsight[];
 
   autonomousWork: DepartmentInsight[];
@@ -61,6 +78,8 @@ export type OrganizationInsightsResult = {
   opportunities: string[];
 
   recommendedFocus: string;
+
+  whatChanged: string[];
 
   confidence: number;
 };
@@ -77,51 +96,131 @@ function clampScore(
   );
 }
 
+function uniqueValues(
+  values: string[],
+): string[] {
+  return Array.from(
+    new Set(
+      values
+        .map(
+          (value) =>
+            value.trim(),
+        )
+        .filter(Boolean),
+    ),
+  );
+}
+
+function statusWeight(
+  status: DepartmentStatus,
+): number {
+  if (
+    status === "blocked"
+  ) {
+    return 35;
+  }
+
+  if (
+    status === "needs_attention"
+  ) {
+    return 25;
+  }
+
+  if (
+    status === "watching"
+  ) {
+    return 12;
+  }
+
+  return 0;
+}
+
+function trendWeight(
+  state: OrganizationDepartmentState,
+): number {
+  if (
+    state.trend === "declining"
+  ) {
+    return Math.min(
+      25,
+      12 +
+      Math.abs(
+        state.healthChange,
+      ) * 2,
+    );
+  }
+
+  if (
+    state.trend === "improving"
+  ) {
+    return Math.max(
+      -15,
+      -Math.abs(
+        state.healthChange,
+      ),
+    );
+  }
+
+  return 0;
+}
+
 function toInsight(
   state: OrganizationDepartmentState,
 ): DepartmentInsight {
-  const attentionBonus =
-    state.requiresOwnerAttention
-      ? 15
-      : 0;
-
-  const declineBonus =
-    state.trend === "declining"
-      ? 20
-      : 0;
-
-  const blockedBonus =
-    state.status === "blocked"
-      ? 30
-      : state.status ===
-          "needs_attention"
-        ? 20
-        : state.status ===
-            "watching"
-          ? 10
-          : 0;
-
   const healthPenalty =
     100 -
     state.healthScore;
+
+  const ownerAttentionWeight =
+    state.requiresOwnerAttention
+      ? 18
+      : 0;
+
+  const missingInformationWeight =
+    Math.min(
+      15,
+      state.missingInformation.length *
+      3,
+    );
+
+  const confidencePenalty =
+    Math.max(
+      0,
+      80 -
+      state.confidence,
+    ) * 0.2;
 
   return {
     department:
       state.department,
 
+    status:
+      state.status,
+
     healthScore:
       state.healthScore,
+
+    healthChange:
+      state.healthChange,
 
     trend:
       state.trend,
 
+    confidence:
+      state.confidence,
+
     priority:
       clampScore(
-        healthPenalty *
-          0.45 +
-        blockedBonus +
-        declineBonus +
-        attentionBonus,
+        healthPenalty * 0.4 +
+        statusWeight(
+          state.status,
+        ) +
+        trendWeight(
+          state,
+        ) +
+        ownerAttentionWeight +
+        missingInformationWeight +
+        confidencePenalty,
       ),
 
     summary:
@@ -138,22 +237,16 @@ function toInsight(
 
     canOperateAutomatically:
       state.canOperateAutomatically,
-  };
-}
 
-function uniqueValues(
-  values: string[],
-): string[] {
-  return Array.from(
-    new Set(
-      values
-        .map(
-          (value) =>
-            value.trim(),
-        )
-        .filter(Boolean),
-    ),
-  );
+    ownerDecisionCount:
+      state.ownerDecisionCount,
+
+    kaiWorkCount:
+      state.kaiWorkCount,
+
+    missingInformationCount:
+      state.missingInformation.length,
+  };
 }
 
 function highestBy(
@@ -210,16 +303,28 @@ function buildExecutiveSummary(
   weakest:
     | DepartmentInsight
     | null,
+  highestPriority:
+    | DepartmentInsight
+    | null,
 ): string {
-  const parts: string[] = [
-    `Overall organization health is ${snapshot.overallHealthScore} with a ${snapshot.overallTrend} trend.`,
+  const parts = [
+    `Overall organization health is ${snapshot.overallHealthScore}% and the current trend is ${snapshot.overallTrend}.`,
   ];
+
+  if (
+    snapshot.previousOverallHealthScore !==
+    null
+  ) {
+    parts.push(
+      `Health changed by ${snapshot.overallHealthChange} point(s) since the previous snapshot.`,
+    );
+  }
 
   if (
     strongest
   ) {
     parts.push(
-      `${strongest.department} is currently the healthiest department at ${strongest.healthScore}.`,
+      `${strongest.department} is currently strongest at ${strongest.healthScore}%.`,
     );
   }
 
@@ -227,7 +332,15 @@ function buildExecutiveSummary(
     weakest
   ) {
     parts.push(
-      `${weakest.department} needs the most attention at ${weakest.healthScore}.`,
+      `${weakest.department} is currently weakest at ${weakest.healthScore}%.`,
+    );
+  }
+
+  if (
+    highestPriority
+  ) {
+    parts.push(
+      `${highestPriority.department} has the highest executive priority at ${highestPriority.priority}%.`,
     );
   }
 
@@ -238,40 +351,117 @@ function buildExecutiveSummary(
 
 function buildRecommendedFocus(
   snapshot: OrganizationSnapshot,
-  insights: DepartmentInsight[],
+  highestPriority:
+    | DepartmentInsight
+    | null,
 ): string {
-  const highestPriority =
-    highestBy(
-      insights,
-      (insight) =>
-        insight.priority,
-    );
-
   if (
     highestPriority
   ) {
     if (
       highestPriority.requiresOwnerAttention
     ) {
-      return `Review ${highestPriority.department} first because owner attention is required.`;
+      return `Review ${highestPriority.department} first. Owner judgment is required and its current priority is ${highestPriority.priority}%.`;
     }
 
     if (
       highestPriority.canOperateAutomatically
     ) {
-      return `Let KAI continue working inside ${highestPriority.department} because it has the strongest autonomous opportunity.`;
+      return `Let KAI continue working inside ${highestPriority.department}. It has the strongest autonomous priority at ${highestPriority.priority}%.`;
     }
 
-    return `Focus on ${highestPriority.department} because it has the highest current operational priority.`;
+    return `Focus on ${highestPriority.department}. It has the highest current operational priority at ${highestPriority.priority}%.`;
   }
 
   if (
-    snapshot.biggestOpportunity
+    snapshot.biggestOpportunity.trim()
   ) {
     return snapshot.biggestOpportunity;
   }
 
   return "Continue monitoring the organization until a stronger priority appears.";
+}
+
+function buildWhatChanged(
+  snapshot: OrganizationSnapshot,
+): string[] {
+  const changes = [
+    snapshot.previousOverallHealthScore !==
+    null
+      ? `Overall health changed from ${snapshot.previousOverallHealthScore}% to ${snapshot.overallHealthScore}%.`
+      : `The first organization health score was recorded at ${snapshot.overallHealthScore}%.`,
+  ];
+
+  for (
+    const state of
+    snapshot.departmentStates
+  ) {
+    if (
+      state.previousHealthScore ===
+      null
+    ) {
+      changes.push(
+        `${state.department} recorded its first health score at ${state.healthScore}%.`,
+      );
+
+      continue;
+    }
+
+    if (
+      state.healthChange !== 0
+    ) {
+      changes.push(
+        `${state.department} changed by ${state.healthChange} point(s) to ${state.healthScore}%.`,
+      );
+    }
+  }
+
+  return uniqueValues(
+    changes,
+  );
+}
+
+function calculateConfidence(
+  insights: DepartmentInsight[],
+): number {
+  if (
+    insights.length === 0
+  ) {
+    return 0;
+  }
+
+  const averageConfidence =
+    insights.reduce(
+      (
+        total,
+        insight,
+      ) =>
+        total +
+        insight.confidence,
+      0,
+    ) /
+    insights.length;
+
+  const missingInformationCount =
+    insights.reduce(
+      (
+        total,
+        insight,
+      ) =>
+        total +
+        insight
+          .missingInformationCount,
+      0,
+    );
+
+  return clampScore(
+    averageConfidence -
+    Math.min(
+      20,
+      missingInformationCount *
+      2,
+    ),
+  );
 }
 
 export class OrganizationInsights {
@@ -302,6 +492,9 @@ export class OrganizationInsights {
         fastestDecliningDepartment:
           null,
 
+        highestPriorityDepartment:
+          null,
+
         ownerAttention:
           [],
 
@@ -316,6 +509,9 @@ export class OrganizationInsights {
 
         recommendedFocus:
           "Record the first organization snapshot.",
+
+        whatChanged:
+          [],
 
         confidence:
           0,
@@ -342,10 +538,10 @@ export class OrganizationInsights {
       );
 
     const fastestImprovingDepartment =
-      snapshot.departmentStates
+      [...insights]
         .filter(
-          (state) =>
-            state.trend ===
+          (insight) =>
+            insight.trend ===
             "improving",
         )
         .sort(
@@ -355,17 +551,13 @@ export class OrganizationInsights {
           ) =>
             second.healthChange -
             first.healthChange,
-        )
-        .map(
-          toInsight,
-        )[0] ??
-      null;
+        )[0] ?? null;
 
     const fastestDecliningDepartment =
-      snapshot.departmentStates
+      [...insights]
         .filter(
-          (state) =>
-            state.trend ===
+          (insight) =>
+            insight.trend ===
             "declining",
         )
         .sort(
@@ -375,11 +567,14 @@ export class OrganizationInsights {
           ) =>
             first.healthChange -
             second.healthChange,
-        )
-        .map(
-          toInsight,
-        )[0] ??
-      null;
+        )[0] ?? null;
+
+    const highestPriorityDepartment =
+      highestBy(
+        insights,
+        (insight) =>
+          insight.priority,
+      );
 
     const ownerAttention =
       insights
@@ -414,6 +609,11 @@ export class OrganizationInsights {
     const risks =
       uniqueValues(
         snapshot.departmentStates
+          .filter(
+            (state) =>
+              state.biggestRisk !==
+              "No major risk detected.",
+          )
           .map(
             (state) =>
               `${state.department}: ${state.biggestRisk}`,
@@ -423,31 +623,16 @@ export class OrganizationInsights {
     const opportunities =
       uniqueValues(
         snapshot.departmentStates
+          .filter(
+            (state) =>
+              state.biggestOpportunity !==
+              "No major opportunity detected.",
+          )
           .map(
             (state) =>
               `${state.department}: ${state.biggestOpportunity}`,
           ),
       );
-
-    const confidence =
-      insights.length > 0
-        ? clampScore(
-            insights.reduce(
-              (
-                total,
-                insight,
-              ) =>
-                total +
-                snapshot.departmentStates.find(
-                  (state) =>
-                    state.department ===
-                    insight.department,
-                )!.confidence,
-              0,
-            ) /
-              insights.length,
-          )
-        : 0;
 
     return {
       generatedAt:
@@ -458,6 +643,7 @@ export class OrganizationInsights {
           snapshot,
           strongestDepartment,
           weakestDepartment,
+          highestPriorityDepartment,
         ),
 
       strongestDepartment,
@@ -467,6 +653,8 @@ export class OrganizationInsights {
       fastestImprovingDepartment,
 
       fastestDecliningDepartment,
+
+      highestPriorityDepartment,
 
       ownerAttention,
 
@@ -479,10 +667,18 @@ export class OrganizationInsights {
       recommendedFocus:
         buildRecommendedFocus(
           snapshot,
-          insights,
+          highestPriorityDepartment,
         ),
 
-      confidence,
+      whatChanged:
+        buildWhatChanged(
+          snapshot,
+        ),
+
+      confidence:
+        calculateConfidence(
+          insights,
+        ),
     };
   }
 }

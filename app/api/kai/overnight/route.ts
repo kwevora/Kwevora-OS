@@ -32,12 +32,16 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
+
       report:
         latestReport.report,
+
       reportId:
         latestReport.id,
+
       createdAt:
         latestReport.createdAt,
+
       message:
         "KAI loaded the latest overnight report.",
     });
@@ -82,6 +86,7 @@ export async function POST(
         return NextResponse.json(
           {
             success: false,
+
             message:
               "The overnight request must be a JSON object.",
           },
@@ -96,18 +101,40 @@ export async function POST(
     }
 
     const result =
-      overnightEngine.run(
+      await overnightEngine.run(
         decisionRequest,
       );
 
     return NextResponse.json({
       success: true,
+
       report:
         result.report,
+
       reportId:
         result.storedReport.id,
+
       createdAt:
         result.storedReport.createdAt,
+
+      executiveReview:
+        result.executiveReview,
+
+      organizationSnapshot:
+        result.organizationSnapshot,
+
+      judgment:
+        result.judgment,
+
+      executionPlan:
+        result.executionPlan,
+
+      contentPackage:
+        result.contentPackage,
+
+      reviewItemId:
+        result.reviewItemId,
+
       message:
         "KAI completed and saved the overnight shift.",
     });
