@@ -1,0 +1,31 @@
+{
+  "videoId": "9616d6bc-e4f2-4d5d-bf43-f4e9d2be4688",
+  "title": "One Step Closer",
+  "brand": "KWEVORA",
+  "scenes": [
+    {
+      "id": "9616d6bc-e4f2-4d5d-bf43-f4e9d2be4688-scene-1",
+      "text": "You do not have to change your whole life today. You only need to take one step.",
+      "durationInFrames": 225,
+      "backgroundColor": "#07040f"
+    },
+    {
+      "id": "9616d6bc-e4f2-4d5d-bf43-f4e9d2be4688-scene-2",
+      "text": "You do not have to change your whole life today.\nYou only need to take one step.\n\nOne post.\nOne new skill.\nOne small product.\nOne decision to stop waiting.\n\nMost people stay stuck because they believe the first move has to be huge.\n\nIt does not.\n\nStart small.\nStay consistent.\nGet one step closer.",
+      "durationInFrames": 225,
+      "backgroundColor": "#111827"
+    },
+    {
+      "id": "9616d6bc-e4f2-4d5d-bf43-f4e9d2be4688-scene-3",
+      "text": "Take your first step today. Visit Help people escape the paycheck-to-paycheck lifestyle using digital products and affiliate marketing..",
+      "durationInFrames": 225,
+      "backgroundColor": "#172554"
+    },
+    {
+      "id": "9616d6bc-e4f2-4d5d-bf43-f4e9d2be4688-scene-4",
+      "text": "One Step Closer.",
+      "durationInFrames": 225,
+      "backgroundColor": "#000000"
+    }
+  ]
+}

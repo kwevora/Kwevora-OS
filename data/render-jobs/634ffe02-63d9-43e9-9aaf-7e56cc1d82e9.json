@@ -1,0 +1,32 @@
+{
+  "videoId": "634ffe02-63d9-43e9-9aaf-7e56cc1d82e9",
+  "title": "One Step Closer",
+  "brand": "KWEVORA",
+  "scenes": [
+    {
+      "id": "scene-1",
+      "text": "ONE DECISION CAN CHANGE EVERYTHING",
+      "durationInFrames": 150
+    },
+    {
+      "id": "scene-2",
+      "text": "WORK HARDER... STAY STUCK?",
+      "durationInFrames": 210
+    },
+    {
+      "id": "scene-3",
+      "text": "BUILD SOMETHING OF YOUR OWN",
+      "durationInFrames": 240
+    },
+    {
+      "id": "scene-4",
+      "text": "ONE STEP CLOSER",
+      "durationInFrames": 150
+    },
+    {
+      "id": "scene-5",
+      "text": "START TODAY",
+      "durationInFrames": 150
+    }
+  ]
+}

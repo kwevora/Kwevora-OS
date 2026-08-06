@@ -1,0 +1,49 @@
+[
+  {
+    "id": "44decf15-654c-4333-a00a-ecffe4ef17b5",
+    "createdAt": "2026-07-23T12:01:59.753Z",
+    "status": "ready_for_review",
+    "idea": "Focus on the reality of coding requiring hard work and time, appealing to the audience's curiosity.",
+    "hook": "If coding was easy, everyone would do it.",
+    "title": "Why Coding Isn't As Easy As It Looks",
+    "script": "That's cool. Yeah. Yeah, of course, you know, I don't understand, you know, of course, you're writing code. I don't understand the timelines of what it takes to generate this or that. And granted, if it was easy, everybody would have done it.",
+    "caption": "It's easy to underestimate the time and effort that goes into writing code. Many people don't realize the depth of knowledge and problem-solving skills required. Let's break down what really makes coding complex and valuable.",
+    "hashtags": [
+      "#CodingJourney",
+      "#TechSkills",
+      "#ProgrammingRealities",
+      "#CodingLife",
+      "#BeginnerCoder"
+    ],
+    "media": {
+      "source": "recording",
+      "fileName": "kwevora-recording-1784808119599.webm",
+      "storedFileName": "1784808119729-4ccdc48f-d6eb-4dd8-b198-781eb3e336cd-kwevora-recording-1784808119599.webm",
+      "mimeType": "video/webm;codecs=vp9,opus",
+      "size": 2774074,
+      "filePath": "/data/video-uploads/1784808119729-4ccdc48f-d6eb-4dd8-b198-781eb3e336cd-kwevora-recording-1784808119599.webm"
+    },
+    "processingStatus": "ready_for_review",
+    "processingError": "",
+    "updatedAt": "2026-07-23T12:02:10.042Z",
+    "transcript": "That's cool. Yeah. Yeah, of course, you know, I don't understand, you know, of course, you're writing code. I don't understand the timelines of what it takes to generate this or that. And granted, if it was easy, everybody would have done it.",
+    "thumbnailIdea": "Text: 'The Reality of Coding' / Visual: A person looking at a complicated code screen, looking puzzled.",
+    "callToAction": "Share your coding experiences or challenges in the comments below!",
+    "platformRecommendation": "TikTok or Instagram Reels, as both platforms cater to quick, relatable content that can spark discussion among beginners.",
+    "publishingRecommendation": "Use a conversational tone, keep the pacing relaxed, and consider adding relevant graphics or captions to make the insights clearer.",
+    "intelligenceReport": {
+      "coreMessage": "Creating something valuable, like code, requires time and effort, and it's not always easy to understand that process.",
+      "contentGoal": "To highlight the complexity and dedication required in coding and similar tasks.",
+      "targetAudience": "Beginners and those curious about coding or technology who may underestimate the effort involved.",
+      "audienceProblem": "Feeling overwhelmed or confused about why coding takes so long and what goes into it.",
+      "audienceDesire": "To gain an understanding of the time and effort that goes into coding, and to appreciate the skills required.",
+      "primaryEmotion": "Confusion mixed with curiosity.",
+      "emotionalJourney": "Start feeling overwhelmed by coding concepts, grow into an understanding of its complexities, and end with a sense of appreciation and respect for the craft.",
+      "strongestMoment": "Acknowledging that if coding was easy, everyone would do it, which highlights the skill and dedication involved.",
+      "scrollStoppingReason": "Those interested in coding will stop to reflect on their own assumptions and experiences with learning and creating code.",
+      "creatorVoice": "Casual and relatable, expressing curiosity and acknowledgment of complexity in simple terms.",
+      "recommendedAngle": "Focus on the reality of coding requiring hard work and time, appealing to the audience's curiosity.",
+      "reasoningSummary": "This angle resonates with beginners' experiences and challenges, making it relatable and fostering a deeper appreciation for coding."
+    }
+  }
+]

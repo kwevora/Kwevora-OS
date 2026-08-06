@@ -1,0 +1,32 @@
+{
+  "videoId": "324917de-0dc8-4bec-b186-0ee073e4fe5d",
+  "title": "Help people take one step toward escaping the paycheck-to-paycheck lifestyle",
+  "brand": "KWEVORA",
+  "scenes": [
+    {
+      "id": "324917de-0dc8-4bec-b186-0ee073e4fe5d-scene-1",
+      "text": "I'M YOU",
+      "durationInFrames": 180
+    },
+    {
+      "id": "324917de-0dc8-4bec-b186-0ee073e4fe5d-scene-2",
+      "text": "DON'T WAIT",
+      "durationInFrames": 210
+    },
+    {
+      "id": "324917de-0dc8-4bec-b186-0ee073e4fe5d-scene-3",
+      "text": "ONE DECISION",
+      "durationInFrames": 240
+    },
+    {
+      "id": "324917de-0dc8-4bec-b186-0ee073e4fe5d-scene-4",
+      "text": "YOUR MOVE",
+      "durationInFrames": 150
+    },
+    {
+      "id": "324917de-0dc8-4bec-b186-0ee073e4fe5d-scene-5",
+      "text": "ONE STEP CLOSER",
+      "durationInFrames": 120
+    }
+  ]
+}

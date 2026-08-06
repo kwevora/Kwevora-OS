@@ -1,0 +1,98 @@
+[
+  {
+    "id": "ad74a996-1318-41c0-9a77-8062ad59562e",
+    "createdAt": "2026-07-23T11:12:01.535Z",
+    "approvedAt": "2026-07-23T11:13:11.787Z",
+    "updatedAt": "2026-07-23T11:13:11.787Z",
+    "status": "ready_to_publish",
+    "idea": "Position the speaker as a misunderstood advocate for community-police communication.",
+    "hook": "Charged with obstruction of justice, but I wasn’t trying to interfere—I was trying to help.",
+    "title": "Bridging the Gap: Community Voices and Justice",
+    "script": "Charged with obstruction of justice. So they said I was trying to run a parallel investigation, which I wasn't. I was trying to get people to get them information, because, you know, nobody wants to talk to the cops. They don't get involved. But they come and tell me things, and then I tell them.",
+    "caption": "When people are scared to talk to the police, they share their concerns with me instead. My intention has always been to foster trust and communication. There's so much more happening beneath the surface. Let’s change the narrative together.",
+    "hashtags": [
+      "#CommunityJustice",
+      "#Policing",
+      "#TrustBuilding",
+      "#JusticeAdvocacy",
+      "#CommunityEngagement"
+    ],
+    "thumbnailIdea": "Text: 'Not Obstruction, But Connection' | Visual: The speaker engaged in conversation with community members.",
+    "callToAction": "Join the conversation about building better community connections.",
+    "videoPlan": {
+      "openingText": "",
+      "scenes": [],
+      "endingText": ""
+    },
+    "scheduledFor": "",
+    "publishedAt": "",
+    "media": {
+      "source": "recording",
+      "fileName": "kwevora-recording-1784805120809.webm",
+      "storedFileName": "1784805121517-b187c8c3-7a35-49a6-8204-6030e97832a8-kwevora-recording-1784805120809.webm",
+      "mimeType": "video/webm;codecs=vp9,opus",
+      "size": 2781775,
+      "filePath": "/data/video-uploads/1784805121517-b187c8c3-7a35-49a6-8204-6030e97832a8-kwevora-recording-1784805120809.webm"
+    }
+  },
+  {
+    "id": "36d2a0ef-7b47-49b5-8f6f-6c15c50f360a",
+    "createdAt": "2026-07-20T10:10:35.191Z",
+    "approvedAt": "2026-07-23T08:25:37.932Z",
+    "updatedAt": "2026-07-23T08:25:37.932Z",
+    "status": "ready_to_publish",
+    "idea": "Kent’s audience often feels too busy to add anything new. This idea offers a realistic way to move forward without overwhelm.",
+    "reason": "Kent’s audience often feels too busy to add anything new. This idea offers a realistic way to move forward without overwhelm.",
+    "hook": "No time for a side hustle? Let’s fix that.",
+    "title": "Finding Time for Your Side Hustle When You’re Busy",
+    "script": "No time for a side hustle?\n\nText: 'Find tiny pockets of 10-15 minutes.'\n\nVisual: calendar app or timer on phone.\n\nText: 'Commit to one quick task daily.'\n\nVisual: checklist with simple daily goals.\n\nStart small. Free guide in bio.",
+    "caption": "Feeling like your day is already full? You’re not alone. The key is to find small pockets—10 or 15 minutes here and there—that add up. Use tools like a timer or calendar reminders. Even short, focused sessions can build real momentum. Write down what you want to create, then commit to one quick task daily. It’s about consistent, doable steps.\n\nFor a simple plan on building digital products in small time chunks, check the free guide linked in bio.",
+    "hashtags": [
+      "#BusyLifeHacks",
+      "#SideHustleTime",
+      "#DigitalHustle",
+      "#SmallStepsBigChange",
+      "#ConsistentAction"
+    ],
+    "thumbnailIdea": "Text on screen: 'No time? Try 10 minutes today.'",
+    "callToAction": "Download the free guide from the link in bio and start small.",
+    "audience": "Busy people wanting to build extra income but struggling to find time.",
+    "recommendedPlatforms": [
+      "TikTok",
+      "Instagram Reels",
+      "YouTube Shorts"
+    ],
+    "videoPlan": {
+      "openingText": "No time for a side hustle?",
+      "scenes": [
+        "Text: 'Find tiny pockets of 10-15 minutes.'",
+        "Visual: calendar app or timer on phone.",
+        "Text: 'Commit to one quick task daily.'",
+        "Visual: checklist with simple daily goals."
+      ],
+      "endingText": "Start small. Free guide in bio."
+    },
+    "format": "faceless_video",
+    "destinationLink": "",
+    "pinnedComment": "Download the free guide from the link in bio and start small.",
+    "scheduledFor": "",
+    "publishedAt": ""
+  },
+  {
+    "id": "bb26ba7d-d1ce-482c-8ab9-ceae1b27537e",
+    "createdAt": "2026-07-12T13:42:53.164Z",
+    "status": "approved",
+    "idea": "One Step Closer: Help people escape the paycheck-to-paycheck lifestyle",
+    "hook": "You're probably one decision away from changing your life.",
+    "title": "One Step Closer",
+    "script": "Most people wait for the perfect moment. The truth is that progress starts with one small decision today.",
+    "caption": "Every day is another chance to get one step closer. #KWEVORA",
+    "hashtags": [
+      "#KWEVORA",
+      "#OneStepCloser",
+      "#DigitalIncome",
+      "#Entrepreneur",
+      "#Motivation"
+    ]
+  }
+]

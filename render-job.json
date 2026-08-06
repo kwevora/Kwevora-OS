@@ -1,0 +1,31 @@
+{
+  "videoId": "demo-video",
+  "title": "KWEVORA",
+  "brand": "KWEVORA",
+  "scenes": [
+    {
+      "id": "1",
+      "text": "You're closer than you think.",
+      "durationInFrames": 150,
+      "backgroundColor": "#050505"
+    },
+    {
+      "id": "2",
+      "text": "One decision can change everything.",
+      "durationInFrames": 150,
+      "backgroundColor": "#111827"
+    },
+    {
+      "id": "3",
+      "text": "Keep moving forward.",
+      "durationInFrames": 150,
+      "backgroundColor": "#1E293B"
+    },
+    {
+      "id": "4",
+      "text": "One Step Closer.",
+      "durationInFrames": 150,
+      "backgroundColor": "#000000"
+    }
+  ]
+}

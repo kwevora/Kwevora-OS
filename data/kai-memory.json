@@ -1,0 +1,48 @@
+{
+  "items": [
+    {
+      "id": "owner-name",
+      "category": "owner",
+      "title": "Owner Name",
+      "value": "Kent",
+      "importance": "high",
+      "confidence": 100,
+      "source": "Initial Setup",
+      "createdAt": "2026-07-24T10:11:29.920Z",
+      "updatedAt": "2026-07-24T10:11:29.920Z"
+    },
+    {
+      "id": "business-name",
+      "category": "business",
+      "title": "Business",
+      "value": "KWEVORA",
+      "importance": "high",
+      "confidence": 100,
+      "source": "Initial Setup",
+      "createdAt": "2026-07-24T10:11:29.920Z",
+      "updatedAt": "2026-07-24T10:11:29.920Z"
+    },
+    {
+      "id": "primary-goal",
+      "category": "business",
+      "title": "Primary Goal",
+      "value": "Help people escape the paycheck-to-paycheck lifestyle using digital products and affiliate marketing.",
+      "importance": "high",
+      "confidence": 100,
+      "source": "Business Vision",
+      "createdAt": "2026-07-24T10:11:29.920Z",
+      "updatedAt": "2026-07-24T10:11:29.920Z"
+    },
+    {
+      "id": "content-style",
+      "category": "preference",
+      "title": "Preferred Content",
+      "value": "Faceless short-form videos with text on screen and optional voiceover.",
+      "importance": "high",
+      "confidence": 100,
+      "source": "User Preference",
+      "createdAt": "2026-07-24T10:11:29.920Z",
+      "updatedAt": "2026-07-24T10:11:29.920Z"
+    }
+  ]
+}
