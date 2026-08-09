@@ -61,7 +61,7 @@ ON overnight_reports (finishedAt DESC);
 `);
 
 /* ----------------------------- */
-/* NEW: KAI Learning Brain       */
+/* KAI Learning Brain            */
 /* ----------------------------- */
 
 db.exec(`
@@ -81,4 +81,57 @@ CREATE TABLE IF NOT EXISTS learning_events (
 db.exec(`
 CREATE INDEX IF NOT EXISTS learning_events_createdAt
 ON learning_events (createdAt DESC);
+`);
+
+/* ----------------------------- */
+/* KAI Execution Memory          */
+/* ----------------------------- */
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS execution_plans (
+  id TEXT PRIMARY KEY,
+  plan TEXT NOT NULL,
+  objective TEXT NOT NULL,
+  status TEXT NOT NULL,
+  progress INTEGER NOT NULL,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT NOT NULL
+);
+`);
+
+db.exec(`
+CREATE INDEX IF NOT EXISTS execution_plans_createdAt
+ON execution_plans (createdAt DESC);
+`);
+
+db.exec(`
+CREATE INDEX IF NOT EXISTS execution_plans_status
+ON execution_plans (status);
+`);
+
+/* ----------------------------- */
+/* KAI Measured Outcomes         */
+/* ----------------------------- */
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS outcome_evaluations (
+  id TEXT PRIMARY KEY,
+  executionPlanId TEXT NOT NULL,
+  evaluation TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  score INTEGER NOT NULL,
+  createdAt TEXT NOT NULL,
+  FOREIGN KEY (executionPlanId)
+    REFERENCES execution_plans(id)
+);
+`);
+
+db.exec(`
+CREATE INDEX IF NOT EXISTS outcome_evaluations_executionPlanId
+ON outcome_evaluations (executionPlanId);
+`);
+
+db.exec(`
+CREATE INDEX IF NOT EXISTS outcome_evaluations_createdAt
+ON outcome_evaluations (createdAt DESC);
 `);

@@ -42,6 +42,10 @@ import {
 } from "./ExecutionEngine";
 
 import {
+  executionPlanRepository,
+} from "./database/ExecutionPlanRepository";
+
+import {
   overnightReportRepository,
   type StoredOvernightReport,
 } from "./database/OvernightReportRepository";
@@ -439,6 +443,10 @@ export class OvernightEngine {
         judgment,
       );
 
+    executionPlanRepository.save(
+      executionPlan,
+    );
+
     let contentPackage:
       ContentPackage | null = null;
 
@@ -516,6 +524,7 @@ export class OvernightEngine {
       "Reviewed Watchtower activity and current business changes.",
       "Applied KAI's judgment to the highest-priority action.",
       "Created an execution plan for the next business action.",
+      "Saved the execution plan for future outcome measurement.",
       "Separated owner decisions from work KAI can handle.",
       "Saved the completed decision into permanent memory.",
     ];
