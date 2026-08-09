@@ -62,126 +62,211 @@ import { randomUUID } from "crypto";
 
 type ReviewQueueItem = {
   id: string;
+
   createdAt: string;
-  status: "needs_review";
+
+  status:
+    "needs_review";
+
+  executionPlanId:
+    string;
 
   idea: string;
-  hook: string;
-  title: string;
-  script: string;
-  caption: string;
-  hashtags: string[];
 
-  thumbnailIdea: string;
-  callToAction: string;
-  audience: string;
-  recommendedPlatforms: string[];
+  hook: string;
+
+  title: string;
+
+  script: string;
+
+  caption: string;
+
+  hashtags:
+    string[];
+
+  thumbnailIdea:
+    string;
+
+  callToAction:
+    string;
+
+  audience:
+    string;
+
+  recommendedPlatforms:
+    string[];
 
   videoPlan: {
-    openingText: string;
-    scenes: string[];
-    endingText: string;
-    estimatedLengthSeconds: number;
+    openingText:
+      string;
+
+    scenes:
+      string[];
+
+    endingText:
+      string;
+
+    estimatedLengthSeconds:
+      number;
   };
 
-  reason: string;
+  reason:
+    string;
 
   format:
     | "faceless_video"
     | "record_yourself"
     | "upload_video";
 
-  destinationLink: string;
-  pinnedComment: string;
+  destinationLink:
+    string;
 
-  suggestedPostingTime?: string;
-  confidence?: number;
-  estimatedBusinessImpact?: string;
-  followUpIdeas?: string[];
-  sourceOpportunityId?: string;
+  pinnedComment:
+    string;
+
+  suggestedPostingTime?:
+    string;
+
+  confidence?:
+    number;
+
+  estimatedBusinessImpact?:
+    string;
+
+  followUpIdeas?:
+    string[];
+
+  sourceOpportunityId?:
+    string;
 };
 
 export type OvernightReport = {
-  startedAt: string;
-  finishedAt: string;
+  startedAt:
+    string;
 
-  summary: string;
+  finishedAt:
+    string;
 
-  completedWork: string[];
+  summary:
+    string;
 
-  opportunities: string[];
+  completedWork:
+    string[];
 
-  warnings: string[];
+  opportunities:
+    string[];
 
-  nextOwnerDecision: string;
+  warnings:
+    string[];
 
-  activeWork: ActiveWork | null;
+  nextOwnerDecision:
+    string;
 
-  contentCreated: boolean;
+  activeWork:
+    ActiveWork | null;
 
-  createdContentTitle: string;
+  contentCreated:
+    boolean;
 
-  executiveReview: ExecutiveReview;
+  createdContentTitle:
+    string;
 
-  executivePriority: string;
+  executiveReview:
+    ExecutiveReview;
 
-  ownerTasks: string[];
+  executivePriority:
+    string;
 
-  kaiTasks: string[];
+  ownerTasks:
+    string[];
 
-  biggestRisk: string;
+  kaiTasks:
+    string[];
 
-  biggestOpportunity: string;
+  biggestRisk:
+    string;
 
-  cognitiveSessionId: string;
+  biggestOpportunity:
+    string;
 
-  reasoningTrace: string[];
+  cognitiveSessionId:
+    string;
 
-  uncertainties: string[];
+  reasoningTrace:
+    string[];
 
-  organizationHealth: number;
+  uncertainties:
+    string[];
 
-  organizationTrend: string;
+  organizationHealth:
+    number;
 
-  judgment: string;
+  organizationTrend:
+    string;
 
-  judgmentConfidence: number;
+  judgment:
+    string;
 
-  executionPlanId: string;
+  judgmentConfidence:
+    number;
 
-  executionStatus: string;
+  executionPlanId:
+    string;
 
-  executionProgress: number;
+  executionStatus:
+    string;
 
-  executionNextAction: string;
+  executionProgress:
+    number;
+
+  executionNextAction:
+    string;
 };
 
 export type OvernightRunResult = {
-  report: OvernightReport;
-  storedReport: StoredOvernightReport;
-  contentPackage: ContentPackage | null;
-  reviewItemId: string | null;
-  executiveReview: ExecutiveReview;
-  organizationSnapshot: OrganizationSnapshot;
-  judgment: Judgment;
-  executionPlan: ExecutionPlan;
+  report:
+    OvernightReport;
+
+  storedReport:
+    StoredOvernightReport;
+
+  contentPackage:
+    ContentPackage | null;
+
+  reviewItemId:
+    string | null;
+
+  executiveReview:
+    ExecutiveReview;
+
+  organizationSnapshot:
+    OrganizationSnapshot;
+
+  judgment:
+    Judgment;
+
+  executionPlan:
+    ExecutionPlan;
 };
 
-const dataFolder = path.join(
-  process.cwd(),
-  "data",
-);
+const dataFolder =
+  path.join(
+    process.cwd(),
+    "data",
+  );
 
-const reviewQueueFile = path.join(
-  dataFolder,
-  "review-queue.json",
-);
+const reviewQueueFile =
+  path.join(
+    dataFolder,
+    "review-queue.json",
+  );
 
 function ensureReviewQueueFile() {
   mkdirSync(
     dataFolder,
     {
-      recursive: true,
+      recursive:
+        true,
     },
   );
 
@@ -209,11 +294,17 @@ function readReviewQueue():
         "utf8",
       );
 
-    const parsed: unknown =
-      JSON.parse(raw);
+    const parsed:
+      unknown =
+      JSON.parse(
+        raw,
+      );
 
-    return Array.isArray(parsed)
-      ? parsed as ReviewQueueItem[]
+    return Array.isArray(
+      parsed,
+    )
+      ? parsed as
+          ReviewQueueItem[]
       : [];
   } catch {
     return [];
@@ -221,7 +312,8 @@ function readReviewQueue():
 }
 
 function saveReviewQueue(
-  queue: ReviewQueueItem[],
+  queue:
+    ReviewQueueItem[],
 ) {
   ensureReviewQueueFile();
 
@@ -237,17 +329,24 @@ function saveReviewQueue(
 }
 
 function contentPackageToReviewItem(
-  contentPackage: ContentPackage,
+  contentPackage:
+    ContentPackage,
+
+  executionPlanId:
+    string,
 ): ReviewQueueItem {
   return {
     id:
       randomUUID(),
 
     createdAt:
-      new Date().toISOString(),
+      new Date()
+        .toISOString(),
 
     status:
       "needs_review",
+
+    executionPlanId,
 
     idea:
       contentPackage.idea,
@@ -268,32 +367,39 @@ function contentPackageToReviewItem(
       contentPackage.hashtags,
 
     thumbnailIdea:
-      contentPackage.thumbnailIdea,
+      contentPackage
+        .thumbnailIdea,
 
     callToAction:
-      contentPackage.callToAction,
+      contentPackage
+        .callToAction,
 
     audience:
       contentPackage.audience,
 
     recommendedPlatforms:
-      contentPackage.recommendedPlatforms,
+      contentPackage
+        .recommendedPlatforms,
 
     videoPlan: {
       openingText:
-        contentPackage.videoPlan
+        contentPackage
+          .videoPlan
           .openingText,
 
       scenes:
-        contentPackage.videoPlan
+        contentPackage
+          .videoPlan
           .scenes,
 
       endingText:
-        contentPackage.videoPlan
+        contentPackage
+          .videoPlan
           .endingText,
 
       estimatedLengthSeconds:
-        contentPackage.videoPlan
+        contentPackage
+          .videoPlan
           .estimatedLengthSeconds,
     },
 
@@ -304,24 +410,28 @@ function contentPackageToReviewItem(
       contentPackage.format,
 
     destinationLink:
-      contentPackage.destinationLink,
+      contentPackage
+        .destinationLink,
 
     pinnedComment:
-      contentPackage.pinnedComment,
+      contentPackage
+        .pinnedComment,
 
     suggestedPostingTime:
       contentPackage
         .suggestedPostingTime,
 
     confidence:
-      contentPackage.confidence,
+      contentPackage
+        .confidence,
 
     estimatedBusinessImpact:
       contentPackage
         .estimatedBusinessImpact,
 
     followUpIdeas:
-      contentPackage.followUpIdeas,
+      contentPackage
+        .followUpIdeas,
 
     sourceOpportunityId:
       contentPackage
@@ -330,7 +440,11 @@ function contentPackageToReviewItem(
 }
 
 function saveContentToReviewQueue(
-  contentPackage: ContentPackage,
+  contentPackage:
+    ContentPackage,
+
+  executionPlanId:
+    string,
 ): ReviewQueueItem {
   const queue =
     readReviewQueue();
@@ -338,6 +452,7 @@ function saveContentToReviewQueue(
   const reviewItem =
     contentPackageToReviewItem(
       contentPackage,
+      executionPlanId,
     );
 
   queue.unshift(
@@ -352,42 +467,58 @@ function saveContentToReviewQueue(
 }
 
 function buildOwnerTasks(
-  executiveReview: ExecutiveReview,
+  executiveReview:
+    ExecutiveReview,
 ): string[] {
-  return executiveReview.ownerTasks.map(
-    (task) =>
-      `${task.title}: ${task.reason}`,
-  );
+  return executiveReview
+    .ownerTasks
+    .map(
+      (task) =>
+        `${task.title}: ${task.reason}`,
+    );
 }
 
 function buildKaiTasks(
-  executiveReview: ExecutiveReview,
+  executiveReview:
+    ExecutiveReview,
 ): string[] {
-  return executiveReview.kaiTasks.map(
-    (task) =>
-      `${task.title}: ${task.reason}`,
-  );
+  return executiveReview
+    .kaiTasks
+    .map(
+      (task) =>
+        `${task.title}: ${task.reason}`,
+    );
 }
 
 function buildWarnings(
-  missingMemory: string[],
-  missingBusinessInformation: string[],
-  executiveReview: ExecutiveReview,
-  uncertainties: string[],
+  missingMemory:
+    string[],
+
+  missingBusinessInformation:
+    string[],
+
+  executiveReview:
+    ExecutiveReview,
+
+  uncertainties:
+    string[],
 ): string[] {
   return Array.from(
     new Set([
       ...missingMemory,
 
-      ...missingBusinessInformation.map(
-        (item) =>
-          `Business information still needed: ${item}`,
-      ),
+      ...missingBusinessInformation
+        .map(
+          (item) =>
+            `Business information still needed: ${item}`,
+        ),
 
       ...uncertainties,
 
-      executiveReview.biggestRisk &&
-      executiveReview.biggestRisk !==
+      executiveReview
+        .biggestRisk &&
+      executiveReview
+        .biggestRisk !==
         "No major risk detected."
         ? `Executive risk: ${executiveReview.biggestRisk}`
         : "",
@@ -397,13 +528,18 @@ function buildWarnings(
 
 export class OvernightEngine {
   async run(
-    request: DecisionRequest,
-  ): Promise<OvernightRunResult> {
+    request:
+      DecisionRequest,
+  ): Promise<
+    OvernightRunResult
+  > {
     const startedAt =
-      new Date().toISOString();
+      new Date()
+        .toISOString();
 
     const activeWork =
-      memoryBrain.getActiveWork();
+      memoryBrain
+        .getActiveWork();
 
     const result =
       decisionCore.think(
@@ -411,19 +547,26 @@ export class OvernightEngine {
       );
 
     const departmentReview =
-      await departmentRegistry.reviewAll();
+      await departmentRegistry
+        .reviewAll();
 
     const organizationSnapshot =
-      organizationMemory.recordOrganization(
-        departmentReview.reports,
-      );
+      organizationMemory
+        .recordOrganization(
+          departmentReview
+            .reports,
+        );
 
     const executiveReview =
       executiveBrain.review({
-        decision: result,
+        decision:
+          result,
+
         activeWork,
+
         departments:
-          departmentReview.reports,
+          departmentReview
+            .reports,
       });
 
     const watchtowerStatus =
@@ -432,26 +575,32 @@ export class OvernightEngine {
     const judgment =
       judgmentEngine.evaluate({
         executiveReview,
+
         organization:
           organizationSnapshot,
+
         watchtower:
           watchtowerStatus,
       });
 
     const executionPlan =
-      executionEngine.createPlan(
-        judgment,
+      executionEngine
+        .createPlan(
+          judgment,
+        );
+
+    executionPlanRepository
+      .save(
+        executionPlan,
       );
 
-    executionPlanRepository.save(
-      executionPlan,
-    );
-
     let contentPackage:
-      ContentPackage | null = null;
+      ContentPackage | null =
+      null;
 
     let reviewItemId:
-      string | null = null;
+      string | null =
+      null;
 
     if (
       contentIntelligenceEngine
@@ -467,36 +616,45 @@ export class OvernightEngine {
 
             businessName:
               request.businessName ??
-              request.businessProfile
+              request
+                .businessProfile
                 ?.businessName,
 
             ownerName:
               request.ownerName ??
-              request.businessProfile
+              request
+                .businessProfile
                 ?.ownerName,
 
             products:
               request.products ??
-              request.businessProfile
+              request
+                .businessProfile
                 ?.products,
 
             offers:
               request.offers ??
-              request.businessProfile
+              request
+                .businessProfile
                 ?.services,
 
             targetAudience:
-              request.targetAudience ??
-              request.businessProfile
+              request
+                .targetAudience ??
+              request
+                .businessProfile
                 ?.targetAudience,
 
             connectedPlatforms:
-              request.connectedPlatforms ??
-              request.businessProfile
+              request
+                .connectedPlatforms ??
+              request
+                .businessProfile
                 ?.platforms,
 
             brandVoice:
-              request.businessProfile
+              request
+                .businessProfile
                 ?.brandVoice,
 
             preferredFormat:
@@ -506,6 +664,7 @@ export class OvernightEngine {
       const reviewItem =
         saveContentToReviewQueue(
           contentPackage,
+          executionPlan.id,
         );
 
       reviewItemId =
@@ -514,18 +673,31 @@ export class OvernightEngine {
 
     const completedWork = [
       "Reviewed business context.",
+
       "Recalled relevant long-term memory.",
+
       "Reviewed active work and the last known stopping point.",
+
       "Completed KAI's cognitive reasoning process.",
+
       "Compared the strongest available business opportunities.",
+
       "Generated today's highest-priority decision.",
+
       "Completed KAI's executive review.",
+
       "Recorded the latest organization health snapshot.",
+
       "Reviewed Watchtower activity and current business changes.",
+
       "Applied KAI's judgment to the highest-priority action.",
+
       "Created an execution plan for the next business action.",
+
       "Saved the execution plan for future outcome measurement.",
+
       "Separated owner decisions from work KAI can handle.",
+
       "Saved the completed decision into permanent memory.",
     ];
 
@@ -534,6 +706,10 @@ export class OvernightEngine {
     ) {
       completedWork.push(
         `Created "${contentPackage.title}" as a complete content package.`,
+      );
+
+      completedWork.push(
+        "Linked the content package to its execution plan.",
       );
 
       completedWork.push(
@@ -553,23 +729,28 @@ export class OvernightEngine {
 
     const warnings =
       buildWarnings(
-        result.missingMemory,
+        result
+          .missingMemory,
 
-        result.businessAssessment
+        result
+          .businessAssessment
           ?.missingInformation ??
           [],
 
         executiveReview,
 
-        result.cognitiveSession
+        result
+          .cognitiveSession
           .uncertainties,
       );
 
-    const report: OvernightReport = {
+    const report:
+      OvernightReport = {
       startedAt,
 
       finishedAt:
-        new Date().toISOString(),
+        new Date()
+          .toISOString(),
 
       summary:
         executiveReview.summary,
@@ -577,7 +758,8 @@ export class OvernightEngine {
       completedWork,
 
       opportunities:
-        executiveReview.priorities
+        executiveReview
+          .priorities
           .slice(
             0,
             3,
@@ -590,17 +772,20 @@ export class OvernightEngine {
       warnings,
 
       nextOwnerDecision:
-        result.decision
+        result
+          .decision
           .morningQuestion
           .question,
 
       activeWork,
 
       contentCreated:
-        contentPackage !== null,
+        contentPackage !==
+        null,
 
       createdContentTitle:
-        contentPackage?.title ??
+        contentPackage
+          ?.title ??
         "",
 
       executiveReview,
@@ -614,21 +799,26 @@ export class OvernightEngine {
       kaiTasks,
 
       biggestRisk:
-        executiveReview.biggestRisk,
+        executiveReview
+          .biggestRisk,
 
       biggestOpportunity:
         executiveReview
           .biggestOpportunity,
 
       cognitiveSessionId:
-        result.cognitiveSession.id,
+        result
+          .cognitiveSession
+          .id,
 
       reasoningTrace:
-        result.cognitiveSession
+        result
+          .cognitiveSession
           .reasoningTrace,
 
       uncertainties:
-        result.cognitiveSession
+        result
+          .cognitiveSession
           .uncertainties,
 
       organizationHealth:
@@ -655,7 +845,8 @@ export class OvernightEngine {
         executionPlan.progress,
 
       executionNextAction:
-        executionPlan.nextAction,
+        executionPlan
+          .nextAction,
     };
 
     const storedReport =
@@ -666,12 +857,19 @@ export class OvernightEngine {
 
     return {
       report,
+
       storedReport,
+
       contentPackage,
+
       reviewItemId,
+
       executiveReview,
+
       organizationSnapshot,
+
       judgment,
+
       executionPlan,
     };
   }
@@ -685,7 +883,8 @@ export class OvernightEngine {
 
   history(
     limit = 30,
-  ): StoredOvernightReport[] {
+  ):
+    StoredOvernightReport[] {
     return overnightReportRepository
       .history(
         limit,
