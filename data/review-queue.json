@@ -1,5 +1,380 @@
 [
   {
+    "id": "cda3ecc4-88f0-4abf-80c1-595813f65cba",
+    "createdAt": "2026-08-10T22:15:20.310Z",
+    "status": "ready_for_review",
+    "idea": "Highlight the testing procedures and their role in ensuring product quality.",
+    "hook": "Ever wonder how your favorite eyewear is tested for quality?",
+    "title": "Behind the Scenes: Quality Testing for Quay Bora Eyewear",
+    "script": "Testing quality for Quay Bora.",
+    "caption": "At Quay Bora, quality matters. We put our eyewear through rigorous testing to ensure you get the best. Your confidence starts with knowing that each pair is crafted to perfection. Discover how we ensure the highest standards every step of the way!",
+    "hashtags": [
+      "#QuayBora",
+      "#EyewearQuality",
+      "#FashionTransparency",
+      "#QualityTesting"
+    ],
+    "media": {
+      "source": "upload",
+      "fileName": "IMG_1356.MOV",
+      "storedFileName": "1786400119451-d0c99d44-6d16-4e5d-a3c4-48c6c9491f9a-IMG_1356.MOV",
+      "mimeType": "video/quicktime",
+      "size": 30697102,
+      "filePath": "/data/video-uploads/1786400119451-d0c99d44-6d16-4e5d-a3c4-48c6c9491f9a-IMG_1356.MOV",
+      "quality": {
+        "width": 1080,
+        "height": 1920,
+        "resolution": "1080x1920",
+        "quality": "1080p",
+        "orientation": "portrait",
+        "durationSeconds": 15.93,
+        "frameRate": 30,
+        "codec": "h264",
+        "videoCodec": "h264",
+        "audioCodec": "aac",
+        "rotation": 270,
+        "bitRate": 14835012,
+        "inspected": true,
+        "inspectionMethod": "ffprobe"
+      }
+    },
+    "processingStatus": "ready_for_review",
+    "processingError": "",
+    "updatedAt": "2026-08-10T22:15:41.762Z",
+    "transcript": "Testing quality for Quay Bora.",
+    "thumbnailIdea": "\"Quality Tested\" with an image of eyewear being tested.",
+    "callToAction": "Learn more about our quality standards on our website!",
+    "platformRecommendation": "Instagram, as it allows visual storytelling and engaging with a fashion-conscious audience.",
+    "publishingRecommendation": "Use a relatable story format with quick cuts showing different testing stages, appealing visuals, and straightforward commentary.",
+    "intelligenceReport": {
+      "coreMessage": "The importance of ensuring high-quality standards for Quay Bora.",
+      "contentGoal": "To inform viewers about the quality testing process for the product.",
+      "targetAudience": "Consumers interested in high-quality eyewear and brand transparency.",
+      "audienceProblem": "Concerns about product quality and authenticity in fashion accessories.",
+      "audienceDesire": "To feel confident that they are purchasing a reliable, high-quality product.",
+      "primaryEmotion": "Trust.",
+      "emotionalJourney": "Curiosity at the beginning, assurance in the middle, and confidence at the end.",
+      "strongestMoment": "The moment when the testing results confirm the product’s quality.",
+      "scrollStoppingReason": "The promise of transparency in a brand's quality assurance process.",
+      "creatorVoice": "Direct and informative, emphasizing transparency and quality assurance.",
+      "recommendedAngle": "Highlight the testing procedures and their role in ensuring product quality.",
+      "reasoningSummary": "Focusing on the testing process addresses audience concerns about quality and builds trust, making it an essential angle."
+    }
+  },
+  {
+    "id": "c264dade-2f97-4fe6-88d4-d21a1f6abf33",
+    "createdAt": "2026-08-10T21:58:18.226Z",
+    "status": "processing_failed",
+    "idea": "Uploaded to KWEVORA and sent to KAI.",
+    "hook": "Uploaded through Video Studio.",
+    "title": "IMG_1356",
+    "script": "Uploaded through Video Studio.",
+    "caption": "KAI is preparing this video for review and publishing.",
+    "hashtags": [
+      "#KWEVORA"
+    ],
+    "media": {
+      "source": "upload",
+      "fileName": "IMG_1356.MOV",
+      "storedFileName": "1786399097335-5fe286f7-66d1-41a3-a35a-7836852358df-IMG_1356.MOV",
+      "mimeType": "video/quicktime",
+      "size": 30697102,
+      "filePath": "/data/video-uploads/1786399097335-5fe286f7-66d1-41a3-a35a-7836852358df-IMG_1356.MOV",
+      "quality": {
+        "width": 1080,
+        "height": 1920,
+        "resolution": "1080x1920",
+        "quality": "1080p",
+        "orientation": "portrait",
+        "durationSeconds": 15.93,
+        "frameRate": 30,
+        "codec": "h264",
+        "videoCodec": "h264",
+        "audioCodec": "aac",
+        "rotation": 270,
+        "bitRate": 14835012,
+        "inspected": true,
+        "inspectionMethod": "ffprobe"
+      }
+    },
+    "processingStatus": "processing_failed",
+    "processingError": "Unsupported file format mov",
+    "updatedAt": "2026-08-10T21:58:21.719Z"
+  },
+  {
+    "id": "0a2e0001-3ef5-43be-bab9-f29695a3f251",
+    "createdAt": "2026-08-10T21:48:09.633Z",
+    "status": "needs_review",
+    "idea": "Uploaded to KWEVORA and sent to KAI.",
+    "hook": "Uploaded through Video Studio.",
+    "title": "IMG_1356",
+    "script": "Uploaded through Video Studio.",
+    "caption": "KAI is preparing this video for review and publishing.",
+    "hashtags": [
+      "#KWEVORA"
+    ],
+    "media": {
+      "source": "upload",
+      "fileName": "IMG_1356.MOV",
+      "storedFileName": "1786398485791-3ec95137-6500-4e89-9ffe-c26a9412ce16-IMG_1356.MOV",
+      "mimeType": "video/quicktime",
+      "size": 30697102,
+      "filePath": "/data/video-uploads/1786398485791-3ec95137-6500-4e89-9ffe-c26a9412ce16-IMG_1356.MOV",
+      "quality": {
+        "width": 1080,
+        "height": 1920,
+        "resolution": "1080x1920",
+        "quality": "1080p",
+        "orientation": "portrait",
+        "durationSeconds": 15.93,
+        "frameRate": 30,
+        "codec": "h264",
+        "videoCodec": "h264",
+        "audioCodec": "aac",
+        "rotation": 270,
+        "bitRate": 14835012,
+        "inspected": true,
+        "inspectionMethod": "ffprobe"
+      }
+    }
+  },
+  {
+    "id": "1b94c5d0-ff2f-4890-8bbc-bec040f60459",
+    "createdAt": "2026-08-10T21:40:16.196Z",
+    "status": "needs_review",
+    "idea": "Uploaded to KWEVORA and sent to KAI.",
+    "hook": "Uploaded through Video Studio.",
+    "title": "IMG_1356",
+    "script": "Uploaded through Video Studio.",
+    "caption": "KAI is preparing this video for review and publishing.",
+    "hashtags": [
+      "#KWEVORA"
+    ],
+    "media": {
+      "source": "upload",
+      "fileName": "IMG_1356.MOV",
+      "storedFileName": "1786398016098-804692b5-4f9a-4cc0-85a6-2feae90c7bad-IMG_1356.MOV",
+      "mimeType": "video/quicktime",
+      "size": 30697102,
+      "filePath": "/data/video-uploads/1786398016098-804692b5-4f9a-4cc0-85a6-2feae90c7bad-IMG_1356.MOV",
+      "quality": {
+        "width": null,
+        "height": null,
+        "resolution": null,
+        "quality": "Unknown",
+        "orientation": "unknown",
+        "durationSeconds": null,
+        "frameRate": null,
+        "codec": null,
+        "videoCodec": null,
+        "audioCodec": null,
+        "rotation": null,
+        "bitRate": null,
+        "inspected": false,
+        "inspectionMethod": "unavailable"
+      }
+    }
+  },
+  {
+    "id": "45d9bfa5-96d9-484e-9855-ff1193cf4f8c",
+    "createdAt": "2026-08-10T21:14:03.982Z",
+    "status": "needs_review",
+    "idea": "Uploaded to KWEVORA and sent to KAI.",
+    "hook": "Uploaded through Video Studio.",
+    "title": "IMG_1356",
+    "script": "Uploaded through Video Studio.",
+    "caption": "KAI is preparing this video for review and publishing.",
+    "hashtags": [
+      "#KWEVORA"
+    ],
+    "media": {
+      "source": "upload",
+      "fileName": "IMG_1356.MOV",
+      "storedFileName": "1786396443401-7c4baf9d-6064-4e70-9e8a-636e5ee12157-IMG_1356.MOV",
+      "mimeType": "video/quicktime",
+      "size": 30697102,
+      "filePath": "/data/video-uploads/1786396443401-7c4baf9d-6064-4e70-9e8a-636e5ee12157-IMG_1356.MOV",
+      "quality": {
+        "width": null,
+        "height": null,
+        "resolution": null,
+        "quality": "Unknown",
+        "orientation": "unknown",
+        "durationSeconds": null,
+        "frameRate": null,
+        "codec": null,
+        "videoCodec": null,
+        "audioCodec": null,
+        "rotation": null,
+        "bitRate": null,
+        "inspected": false,
+        "inspectionMethod": "unavailable"
+      }
+    }
+  },
+  {
+    "id": "c71406ce-751e-4051-997b-02b7bc42fe56",
+    "createdAt": "2026-08-10T20:04:31.063Z",
+    "status": "needs_review",
+    "idea": "Uploaded to KWEVORA and sent to KAI.",
+    "hook": "Uploaded through Video Studio.",
+    "title": "IMG_1356",
+    "script": "Uploaded through Video Studio.",
+    "caption": "KAI is preparing this video for review and publishing.",
+    "hashtags": [
+      "#KWEVORA"
+    ],
+    "media": {
+      "source": "upload",
+      "fileName": "IMG_1356.MOV",
+      "storedFileName": "1786392270469-1ba8b7a8-d613-4d73-bd1e-1be46fa52420-IMG_1356.MOV",
+      "mimeType": "video/quicktime",
+      "size": 30697102,
+      "filePath": "/data/video-uploads/1786392270469-1ba8b7a8-d613-4d73-bd1e-1be46fa52420-IMG_1356.MOV",
+      "quality": {
+        "width": null,
+        "height": null,
+        "resolution": null,
+        "quality": "Unknown",
+        "orientation": "unknown",
+        "durationSeconds": 15.98,
+        "frameRate": null,
+        "codec": "MPEG-4/AAC",
+        "inspected": true
+      }
+    }
+  },
+  {
+    "id": "b0edc95d-77a2-4f9f-9ea9-a2f50e7df15a",
+    "createdAt": "2026-08-10T19:57:47.094Z",
+    "status": "needs_review",
+    "idea": "Uploaded to KWEVORA and sent to KAI.",
+    "hook": "Uploaded through Video Studio.",
+    "title": "IMG_1356",
+    "script": "Uploaded through Video Studio.",
+    "caption": "KAI is preparing this video for review and publishing.",
+    "hashtags": [
+      "#KWEVORA"
+    ],
+    "media": {
+      "source": "upload",
+      "fileName": "IMG_1356.MOV",
+      "storedFileName": "1786391866809-64622564-b82e-4a87-8928-3034670432d3-IMG_1356.MOV",
+      "mimeType": "video/quicktime",
+      "size": 30697102,
+      "filePath": "/data/video-uploads/1786391866809-64622564-b82e-4a87-8928-3034670432d3-IMG_1356.MOV",
+      "quality": {
+        "width": null,
+        "height": null,
+        "resolution": null,
+        "quality": "Unknown",
+        "orientation": "unknown",
+        "durationSeconds": 15.98,
+        "frameRate": null,
+        "codec": "MPEG-4/AAC",
+        "inspected": true
+      }
+    }
+  },
+  {
+    "id": "221b2d2a-cd6d-4e76-81c0-db1878e382d0",
+    "createdAt": "2026-08-10T19:53:14.257Z",
+    "status": "needs_review",
+    "idea": "Uploaded to KWEVORA and sent to KAI.",
+    "hook": "Uploaded through Video Studio.",
+    "title": "IMG_1356",
+    "script": "Uploaded through Video Studio.",
+    "caption": "KAI is preparing this video for review and publishing.",
+    "hashtags": [
+      "#KWEVORA"
+    ],
+    "media": {
+      "source": "upload",
+      "fileName": "IMG_1356.MOV",
+      "storedFileName": "1786391593988-a392fd9b-37f9-434a-ab3d-b1d5e51ff363-IMG_1356.MOV",
+      "mimeType": "video/quicktime",
+      "size": 30697102,
+      "filePath": "/data/video-uploads/1786391593988-a392fd9b-37f9-434a-ab3d-b1d5e51ff363-IMG_1356.MOV",
+      "quality": {
+        "width": null,
+        "height": null,
+        "resolution": null,
+        "quality": "Unknown",
+        "orientation": "unknown",
+        "durationSeconds": 15.98,
+        "frameRate": null,
+        "codec": "MPEG-4/AAC",
+        "inspected": true
+      }
+    }
+  },
+  {
+    "id": "81fd1baf-c91f-4573-8e9c-9116fc5321bd",
+    "createdAt": "2026-08-10T19:11:17.807Z",
+    "status": "needs_review",
+    "idea": "Uploaded to KWEVORA and sent to KAI.",
+    "hook": "Uploaded through Video Studio.",
+    "title": "IMG_1356",
+    "script": "Uploaded through Video Studio.",
+    "caption": "KAI is preparing this video for review and publishing.",
+    "hashtags": [
+      "#KWEVORA"
+    ],
+    "media": {
+      "source": "upload",
+      "fileName": "IMG_1356.MOV",
+      "storedFileName": "1786389077733-39cc1a09-68cf-4c2d-a4f5-d847f579c88d-IMG_1356.MOV",
+      "mimeType": "video/quicktime",
+      "size": 30697102,
+      "filePath": "/data/video-uploads/1786389077733-39cc1a09-68cf-4c2d-a4f5-d847f579c88d-IMG_1356.MOV"
+    }
+  },
+  {
+    "id": "4fd7686c-16a7-4a2e-bad7-86fa2ea1fe46",
+    "createdAt": "2026-08-10T13:20:03.787Z",
+    "status": "processing_failed",
+    "idea": "Recorded inside KWEVORA and sent to KAI.",
+    "hook": "Recorded inside KWEVORA. Prepare this video for review and publishing.",
+    "title": "New KWEVORA Recording",
+    "script": "Recorded inside KWEVORA. Prepare this video for review and publishing.",
+    "caption": "KAI is preparing this video for review and publishing.",
+    "hashtags": [
+      "#KWEVORA"
+    ],
+    "media": {
+      "source": "recording",
+      "fileName": "kwevora-recording-1786368003657.webm",
+      "storedFileName": "1786368003779-8934f18a-feb5-4616-91c8-6d9994e5ae35-kwevora-recording-1786368003657.webm",
+      "mimeType": "video/webm;codecs=vp9,opus",
+      "size": 2069510,
+      "filePath": "/data/video-uploads/1786368003779-8934f18a-feb5-4616-91c8-6d9994e5ae35-kwevora-recording-1786368003657.webm"
+    },
+    "processingStatus": "processing_failed",
+    "processingError": "Incorrect API key provided: GOCSPX-o***********************1Xi2. You can find your API key at https://platform.openai.com/account/api-keys.",
+    "updatedAt": "2026-08-10T13:20:04.627Z"
+  },
+  {
+    "id": "de97a028-10e4-432e-8213-bbd3e1b07675",
+    "createdAt": "2026-08-10T13:00:54.132Z",
+    "status": "needs_review",
+    "idea": "Recorded inside KWEVORA and sent to KAI.",
+    "hook": "Recorded inside KWEVORA. Prepare this video for review and publishing.",
+    "title": "New KWEVORA Recording",
+    "script": "Recorded inside KWEVORA. Prepare this video for review and publishing.",
+    "caption": "KAI is preparing this video for review and publishing.",
+    "hashtags": [
+      "#KWEVORA"
+    ],
+    "media": {
+      "source": "recording",
+      "fileName": "kwevora-recording-1786366853542.webm",
+      "storedFileName": "1786366854121-e195f455-a4ec-4171-92bc-93037504b049-kwevora-recording-1786366853542.webm",
+      "mimeType": "video/webm;codecs=vp9,opus",
+      "size": 2598171,
+      "filePath": "/data/video-uploads/1786366854121-e195f455-a4ec-4171-92bc-93037504b049-kwevora-recording-1786366853542.webm"
+    }
+  },
+  {
     "id": "44decf15-654c-4333-a00a-ecffe4ef17b5",
     "createdAt": "2026-07-23T12:01:59.753Z",
     "status": "ready_for_review",

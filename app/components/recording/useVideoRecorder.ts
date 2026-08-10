@@ -2,6 +2,28 @@
 
 import { useEffect, useRef, useState } from "react";
 
+const TARGET_WIDTH = 1920;
+const TARGET_HEIGHT = 1080;
+const TARGET_FRAME_RATE = 30;
+const VIDEO_BITRATE = 8_000_000;
+const AUDIO_BITRATE = 192_000;
+
+function getBestRecordingMimeType() {
+  const preferredTypes = [
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+  ];
+
+  for (const type of preferredTypes) {
+    if (MediaRecorder.isTypeSupported(type)) {
+      return type;
+    }
+  }
+
+  return "";
+}
+
 export function useVideoRecorder() {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [recording, setRecording] = useState(false);
@@ -28,9 +50,7 @@ export function useVideoRecorder() {
 
   useEffect(() => {
     return () => {
-      streamRef.current
-        ?.getTracks()
-        .forEach((track) => track.stop());
+      streamRef.current?.getTracks().forEach((track) => track.stop());
 
       if (recordedUrlRef.current) {
         URL.revokeObjectURL(recordedUrlRef.current);
@@ -52,21 +72,50 @@ export function useVideoRecorder() {
     try {
       setMessage("");
 
-      streamRef.current
-        ?.getTracks()
-        .forEach((track) => track.stop());
+      streamRef.current?.getTracks().forEach((track) => track.stop());
 
       const cameraStream =
         await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
+          video: {
+            width: {
+              ideal: TARGET_WIDTH,
+            },
+            height: {
+              ideal: TARGET_HEIGHT,
+            },
+            frameRate: {
+              ideal: TARGET_FRAME_RATE,
+              max: TARGET_FRAME_RATE,
+            },
+            facingMode: "user",
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 2,
+            sampleRate: 48_000,
+          },
         });
 
       clearRecording();
 
       streamRef.current = cameraStream;
       setStream(cameraStream);
-      setMessage("Camera and microphone are ready.");
+
+      const videoTrack = cameraStream.getVideoTracks()[0];
+      const settings = videoTrack?.getSettings();
+
+      const actualWidth = settings?.width ?? TARGET_WIDTH;
+      const actualHeight = settings?.height ?? TARGET_HEIGHT;
+      const actualFrameRate =
+        settings?.frameRate ?? TARGET_FRAME_RATE;
+
+      setMessage(
+        `Camera ready at ${actualWidth}×${actualHeight} @ ${Math.round(
+          actualFrameRate
+        )} FPS.`
+      );
     } catch (error) {
       console.error("Camera access failed:", error);
 
@@ -92,8 +141,21 @@ export function useVideoRecorder() {
       clearRecording();
       chunksRef.current = [];
 
-      // Let Chrome select its own compatible format and codec.
-      const recorder = new MediaRecorder(activeStream);
+      const mimeType = getBestRecordingMimeType();
+
+      const recorderOptions: MediaRecorderOptions = {
+        videoBitsPerSecond: VIDEO_BITRATE,
+        audioBitsPerSecond: AUDIO_BITRATE,
+      };
+
+      if (mimeType) {
+        recorderOptions.mimeType = mimeType;
+      }
+
+      const recorder = new MediaRecorder(
+        activeStream,
+        recorderOptions
+      );
 
       recorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
@@ -103,6 +165,7 @@ export function useVideoRecorder() {
 
       recorder.onerror = (event) => {
         console.error("MediaRecorder error:", event);
+
         setRecording(false);
         setMessage(
           "The recording failed. Restart the camera and try again."
@@ -118,13 +181,14 @@ export function useVideoRecorder() {
           return;
         }
 
-        const mimeType =
-          chunks[0].type ||
+        const finalMimeType =
           recorder.mimeType ||
+          chunks[0].type ||
+          mimeType ||
           "video/webm";
 
         const blob = new Blob(chunks, {
-          type: mimeType,
+          type: finalMimeType,
         });
 
         if (blob.size === 0) {
@@ -136,25 +200,40 @@ export function useVideoRecorder() {
         const url = URL.createObjectURL(blob);
 
         recordedUrlRef.current = url;
+
         setRecordedBlob(blob);
         setRecordedUrl(url);
         setRecording(false);
+
+        const sizeInMB = blob.size / 1024 / 1024;
+
         setMessage(
-          `Recording complete. ${(blob.size / 1024).toFixed(1)} KB captured.`
+          `Recording complete. ${sizeInMB.toFixed(
+            2
+          )} MB captured at high quality.`
         );
       };
 
       recorderRef.current = recorder;
-      recorder.start();
+
+      /*
+       * Request data every second instead of waiting until the very end.
+       * This helps Chrome build a more reliable recording for longer takes.
+       */
+      recorder.start(1000);
 
       setRecording(true);
-      setMessage("Recording...");
+
+      setMessage(
+        `Recording in high quality (${mimeType || "browser-compatible WebM"})...`
+      );
     } catch (error) {
       console.error("Recording start failed:", error);
 
       setRecording(false);
+
       setMessage(
-        "KWEVORA could not start recording."
+        "KWEVORA could not start the high-quality recording."
       );
     }
   }
@@ -176,11 +255,10 @@ export function useVideoRecorder() {
       recorder.stop();
     }
 
-    streamRef.current
-      ?.getTracks()
-      .forEach((track) => track.stop());
+    streamRef.current?.getTracks().forEach((track) => track.stop());
 
     streamRef.current = null;
+
     setStream(null);
     setRecording(false);
 
@@ -193,7 +271,7 @@ export function useVideoRecorder() {
 
   function recordAgain() {
     clearRecording();
-    setMessage("Ready for another take.");
+    setMessage("Ready for another high-quality take.");
 
     window.setTimeout(() => {
       const preview = previewRef.current;

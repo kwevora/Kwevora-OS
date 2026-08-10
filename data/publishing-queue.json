@@ -1,5 +1,52 @@
 [
   {
+    "id": "1284c147-c9c3-4eb3-a3c0-34687daddfd9",
+    "createdAt": "2026-08-10T13:27:46.375Z",
+    "approvedAt": "2026-08-10T13:31:34.723Z",
+    "updatedAt": "2026-08-10T13:41:25.523Z",
+    "status": "published",
+    "idea": "Focusing on the technical aspects of video quality and the importance of testing before full content production.",
+    "hook": "Ever wondered how to ensure your video quality is top-notch?",
+    "title": "Testing Playbora's YouTube Video Quality",
+    "script": "Playbora YouTube test.",
+    "caption": "In this quick test, we're checking out Playbora's video quality. Testing is crucial for any content creator aiming for the best results. Stay tuned to see how it holds up!",
+    "hashtags": [
+      "#VideoTesting",
+      "#YouTubeCreators",
+      "#ContentQuality",
+      "#Playbora",
+      "#VideoProduction"
+    ],
+    "thumbnailIdea": "Text: 'Quality Check!' | Visual: A screenshot of the testing process on a computer.",
+    "callToAction": "Subscribe for updates on our video quality tests and more insights.",
+    "videoPlan": {
+      "openingText": "",
+      "scenes": [],
+      "endingText": ""
+    },
+    "scheduledFor": "",
+    "publishedAt": "2026-08-10T13:41:25.523Z",
+    "media": {
+      "source": "recording",
+      "fileName": "kwevora-recording-1786368466302.webm",
+      "storedFileName": "1786368466370-5960a9b5-8519-4654-9712-297a2994b7b1-kwevora-recording-1786368466302.webm",
+      "mimeType": "video/webm;codecs=vp9,opus",
+      "size": 1625161,
+      "filePath": "/data/video-uploads/1786368466370-5960a9b5-8519-4654-9712-297a2994b7b1-kwevora-recording-1786368466302.webm"
+    },
+    "publications": [
+      {
+        "platform": "youtube",
+        "externalId": "asVJDSAKXKU",
+        "url": "https://www.youtube.com/watch?v=asVJDSAKXKU",
+        "publishedAt": "2026-08-10T13:41:25.491Z",
+        "channelId": "UCYMAw7cvloh1qdJbP3343-w",
+        "channelName": "Kent Patterson jr",
+        "privacyStatus": "private"
+      }
+    ]
+  },
+  {
     "id": "4c53881b-105f-4b21-ad53-1f31d20e1b30",
     "createdAt": "2026-08-06T17:48:25.612Z",
     "approvedAt": "2026-08-09T21:45:41.533Z",

@@ -15,6 +15,12 @@ type ProcessVideoResponse = {
   message?: string;
 };
 
+const TARGET_WIDTH = 1920;
+const TARGET_HEIGHT = 1080;
+const TARGET_FRAME_RATE = 30;
+const VIDEO_BITRATE = 8_000_000;
+const AUDIO_BITRATE = 192_000;
+
 export default function RecordYourself() {
   const previewRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -26,9 +32,8 @@ export default function RecordYourself() {
   const [cameraReady, setCameraReady] = useState(false);
   const [recording, setRecording] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
-  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(
-    null
-  );
+  const [recordedBlob, setRecordedBlob] =
+    useState<Blob | null>(null);
   const [recordedUrl, setRecordedUrl] = useState("");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [message, setMessage] = useState("");
@@ -121,7 +126,7 @@ export default function RecordYourself() {
 
   async function startCamera() {
     try {
-      setMessage("Starting camera...");
+      setMessage("Starting high-quality camera...");
 
       stopActiveStream();
       clearRecording();
@@ -129,14 +134,24 @@ export default function RecordYourself() {
       const stream =
         await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: { ideal: 30 },
+            width: {
+              ideal: TARGET_WIDTH,
+            },
+            height: {
+              ideal: TARGET_HEIGHT,
+            },
+            frameRate: {
+              ideal: TARGET_FRAME_RATE,
+              max: TARGET_FRAME_RATE,
+            },
+            facingMode: "user",
           },
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
+            channelCount: 2,
+            sampleRate: 48_000,
           },
         });
 
@@ -147,11 +162,24 @@ export default function RecordYourself() {
         attachPreview(stream);
       }, 50);
 
-      setMessage("Camera and microphone are ready.");
+      const videoTrack = stream.getVideoTracks()[0];
+      const settings = videoTrack?.getSettings();
+
+      const width = settings?.width ?? TARGET_WIDTH;
+      const height = settings?.height ?? TARGET_HEIGHT;
+      const frameRate =
+        settings?.frameRate ?? TARGET_FRAME_RATE;
+
+      setMessage(
+        `Camera ready at ${width}×${height} @ ${Math.round(
+          frameRate
+        )} FPS.`
+      );
     } catch (error) {
       console.error("Camera access failed:", error);
 
       setCameraReady(false);
+
       setMessage(
         "KWEVORA could not access your camera or microphone. Check Chrome permissions."
       );
@@ -172,15 +200,18 @@ export default function RecordYourself() {
 
       const mimeType = chooseMimeType();
 
+      const recorderOptions: MediaRecorderOptions = {
+        videoBitsPerSecond: VIDEO_BITRATE,
+        audioBitsPerSecond: AUDIO_BITRATE,
+      };
+
+      if (mimeType) {
+        recorderOptions.mimeType = mimeType;
+      }
+
       const mediaRecorder = new MediaRecorder(
         stream,
-        mimeType
-          ? {
-              mimeType,
-              videoBitsPerSecond: 2_500_000,
-              audioBitsPerSecond: 128_000,
-            }
-          : undefined
+        recorderOptions
       );
 
       mediaRecorderRef.current = mediaRecorder;
@@ -197,6 +228,7 @@ export default function RecordYourself() {
         stopTimer();
         setRecording(false);
         setFinalizing(false);
+
         setMessage(
           "KWEVORA encountered a recording error."
         );
@@ -226,6 +258,7 @@ export default function RecordYourself() {
             URL.createObjectURL(completedBlob);
 
           recordedUrlRef.current = url;
+
           setRecordedBlob(completedBlob);
           setRecordedUrl(url);
 
@@ -234,7 +267,9 @@ export default function RecordYourself() {
               completedBlob.size /
               1024 /
               1024
-            ).toFixed(2)} MB captured.`
+            ).toFixed(
+              2
+            )} MB captured at high quality.`
           );
         } catch (error) {
           console.error(
@@ -259,11 +294,17 @@ export default function RecordYourself() {
 
       startTimer();
       setRecording(true);
-      setMessage("Recording...");
+
+      setMessage(
+        `Recording in high quality — ${
+          mimeType || "browser-compatible WebM"
+        }.`
+      );
     } catch (error) {
       console.error("Recording start failed:", error);
 
       setRecording(false);
+
       setMessage(
         "KWEVORA could not start recording."
       );
@@ -284,7 +325,7 @@ export default function RecordYourself() {
     stopTimer();
     setRecording(false);
     setFinalizing(true);
-    setMessage("Finalizing recording...");
+    setMessage("Finalizing high-quality recording...");
 
     mediaRecorder.stop();
   }
@@ -354,7 +395,10 @@ export default function RecordYourself() {
     }
 
     setSending(true);
-    setMessage("Uploading the recording to KAI...");
+
+    setMessage(
+      "Uploading the full-quality recording to KAI..."
+    );
 
     try {
       const extension = recordedBlob.type.includes(
@@ -382,7 +426,7 @@ export default function RecordYourself() {
       );
       formData.append(
         "notes",
-        "Recorded inside KWEVORA. Prepare this video for review and publishing."
+        "Recorded inside KWEVORA at high quality. Prepare this video for review and publishing."
       );
 
       const uploadResponse = await fetch(
@@ -447,7 +491,7 @@ export default function RecordYourself() {
       }
 
       setMessage(
-        "KAI finished processing the recording. Your content package is ready in the Review Queue."
+        "KAI finished processing the full-quality recording. Your content package is ready in the Review Queue."
       );
     } catch (error) {
       console.error(
@@ -476,8 +520,8 @@ export default function RecordYourself() {
       </h3>
 
       <p className="mt-3 text-gray-300">
-        Record, review your take, record again, save
-        it, or send it to KAI.
+        Record in high quality, review your take,
+        record again, save it, or send it to KAI.
       </p>
 
       <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-black">
