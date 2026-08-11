@@ -11,8 +11,14 @@ type OpportunityRequest = {
   research?: string;
 };
 
+type VerificationStatus =
+  | "verified"
+  | "partially_verified"
+  | "unverified";
+
 type Opportunity = {
   rank: number;
+
   productName: string;
   brand: string;
   category: string;
@@ -27,12 +33,15 @@ type Opportunity = {
   whatItIs: string;
   whyItIsInteresting: string;
 
-  demandEvidence: string[];
-  riskFactors: string[];
-
   targetAudience: string;
   audienceProblem: string;
   buyingReason: string;
+
+  demandEvidence: string[];
+  monetizationEvidence: string[];
+  competitionEvidence: string[];
+  verificationGaps: string[];
+  riskFactors: string[];
 
   sourceName: string;
   sourceType: string;
@@ -40,21 +49,51 @@ type Opportunity = {
 
   affiliateProgramKnown: boolean;
   affiliateProgramName: string;
+  affiliateProgramUrl: string;
   affiliateInstructions: string;
 
-  estimatedPriceRange: string;
   commissionInformation: string;
+  commissionVerified: boolean;
 
-  trendScore: number;
-  monetizationScore: number;
-  contentScore: number;
-  competitionScore: number;
-  overallScore: number;
+  estimatedPriceRange: string;
+  startupCost: string;
+  approvalRequirements: string;
+  expectedLaunchDifficulty: string;
+  speedToLaunch: string;
+
+  verificationStatus: VerificationStatus;
+
+  facelessVideoFit: {
+    score: number;
+    reason: string;
+    demoPossible: boolean;
+    productVisualsAvailable: boolean;
+    contentAngles: string[];
+  };
+
+  scores: {
+    demand: number;
+    monetization: number;
+    contentPotential: number;
+    competition: number;
+    audienceFit: number;
+    startupEase: number;
+    speedToLaunch: number;
+    verificationConfidence: number;
+    overall: number;
+  };
 
   recommendedOffer: string;
 
   stanStorePlan: {
     shouldUseStanStore: boolean;
+    role:
+      | "affiliate_bridge"
+      | "lead_magnet"
+      | "digital_product"
+      | "direct_offer"
+      | "not_needed";
+
     productTitle: string;
     productDescription: string;
     callToAction: string;
@@ -70,6 +109,14 @@ type Opportunity = {
     callToAction: string;
   };
 
+  firstMoneyTest: {
+    objective: string;
+    contentCount: number;
+    testPeriod: string;
+    successSignal: string;
+    stopSignal: string;
+  };
+
   nextMove: string;
 };
 
@@ -83,7 +130,11 @@ type OpportunityReport = {
   recommendation: {
     bestOpportunity: string;
     reason: string;
+    whyItWon: string[];
     firstAction: string;
+    confidence: number;
+    readyToAct: boolean;
+    blockingVerification: string[];
   };
 
   opportunities: Opportunity[];
@@ -93,6 +144,10 @@ function cleanString(value: unknown): string {
   return typeof value === "string"
     ? value.trim()
     : "";
+}
+
+function cleanBoolean(value: unknown): boolean {
+  return value === true;
 }
 
 function clampScore(value: unknown): number {
@@ -108,6 +163,25 @@ function clampScore(value: unknown): number {
   return Math.max(
     0,
     Math.min(100, Math.round(number))
+  );
+}
+
+function cleanPositiveInteger(
+  value: unknown,
+  fallback: number
+): number {
+  const number =
+    typeof value === "number"
+      ? value
+      : Number(value);
+
+  if (!Number.isFinite(number)) {
+    return fallback;
+  }
+
+  return Math.max(
+    1,
+    Math.round(number)
   );
 }
 
@@ -141,6 +215,8 @@ function extractOutputText(data: any): string {
     return "";
   }
 
+  const parts: string[] = [];
+
   for (const outputItem of data.output) {
     if (!Array.isArray(outputItem?.content)) {
       continue;
@@ -151,12 +227,90 @@ function extractOutputText(data: any): string {
         typeof content?.text === "string" &&
         content.text.trim()
       ) {
-        return content.text.trim();
+        parts.push(content.text.trim());
       }
     }
   }
 
-  return "";
+  return parts.join("\n").trim();
+}
+
+function getVerificationStatus(
+  value: unknown
+): VerificationStatus {
+  if (
+    value === "verified" ||
+    value === "partially_verified" ||
+    value === "unverified"
+  ) {
+    return value;
+  }
+
+  return "unverified";
+}
+
+/*
+ * KWEVORA owns the final score.
+ *
+ * KAI supplies evidence-based component scores,
+ * but it does NOT get to simply declare its own
+ * winner with an arbitrary overall number.
+ */
+function calculateOverallScore(scores: {
+  demand: number;
+  monetization: number;
+  contentPotential: number;
+  competition: number;
+  audienceFit: number;
+  startupEase: number;
+  speedToLaunch: number;
+  verificationConfidence: number;
+}) {
+  const weighted =
+    scores.demand * 0.16 +
+    scores.monetization * 0.2 +
+    scores.contentPotential * 0.16 +
+    scores.competition * 0.08 +
+    scores.audienceFit * 0.1 +
+    scores.startupEase * 0.1 +
+    scores.speedToLaunch * 0.08 +
+    scores.verificationConfidence * 0.12;
+
+  return clampScore(weighted);
+}
+
+function applyVerificationPenalty(
+  score: number,
+  verificationStatus: VerificationStatus,
+  affiliateProgramKnown: boolean,
+  commissionVerified: boolean,
+  opportunityType: Opportunity["opportunityType"]
+) {
+  let penalty = 0;
+
+  if (verificationStatus === "partially_verified") {
+    penalty += 8;
+  }
+
+  if (verificationStatus === "unverified") {
+    penalty += 20;
+  }
+
+  if (
+    opportunityType === "affiliate" &&
+    !affiliateProgramKnown
+  ) {
+    penalty += 15;
+  }
+
+  if (
+    opportunityType === "affiliate" &&
+    !commissionVerified
+  ) {
+    penalty += 5;
+  }
+
+  return clampScore(score - penalty);
 }
 
 function normalizeOpportunity(
@@ -168,6 +322,107 @@ function normalizeOpportunity(
 
   const marketingPlan =
     value?.marketingPlan ?? {};
+
+  const facelessVideoFit =
+    value?.facelessVideoFit ?? {};
+
+  const rawScores =
+    value?.scores ?? {};
+
+  const firstMoneyTest =
+    value?.firstMoneyTest ?? {};
+
+  const opportunityType:
+    Opportunity["opportunityType"] =
+      [
+        "affiliate",
+        "digital_product",
+        "physical_product",
+        "service",
+        "unknown",
+      ].includes(value?.opportunityType)
+        ? value.opportunityType
+        : "unknown";
+
+  const verificationStatus =
+    getVerificationStatus(
+      value?.verificationStatus
+    );
+
+  const affiliateProgramKnown =
+    cleanBoolean(
+      value?.affiliateProgramKnown
+    );
+
+  const commissionVerified =
+    cleanBoolean(
+      value?.commissionVerified
+    );
+
+  const scores = {
+    demand:
+      clampScore(rawScores?.demand),
+
+    monetization:
+      clampScore(
+        rawScores?.monetization
+      ),
+
+    contentPotential:
+      clampScore(
+        rawScores?.contentPotential
+      ),
+
+    competition:
+      clampScore(
+        rawScores?.competition
+      ),
+
+    audienceFit:
+      clampScore(
+        rawScores?.audienceFit
+      ),
+
+    startupEase:
+      clampScore(
+        rawScores?.startupEase
+      ),
+
+    speedToLaunch:
+      clampScore(
+        rawScores?.speedToLaunch
+      ),
+
+    verificationConfidence:
+      clampScore(
+        rawScores?.verificationConfidence
+      ),
+
+    overall: 0,
+  };
+
+  const calculatedOverall =
+    calculateOverallScore(scores);
+
+  scores.overall =
+    applyVerificationPenalty(
+      calculatedOverall,
+      verificationStatus,
+      affiliateProgramKnown,
+      commissionVerified,
+      opportunityType
+    );
+
+  const stanRole =
+    [
+      "affiliate_bridge",
+      "lead_magnet",
+      "digital_product",
+      "direct_offer",
+      "not_needed",
+    ].includes(stanStorePlan?.role)
+      ? stanStorePlan.role
+      : "not_needed";
 
   return {
     rank,
@@ -184,16 +439,7 @@ function normalizeOpportunity(
       cleanString(value?.category) ||
       "Unknown",
 
-    opportunityType:
-      [
-        "affiliate",
-        "digital_product",
-        "physical_product",
-        "service",
-        "unknown",
-      ].includes(value?.opportunityType)
-        ? value.opportunityType
-        : "unknown",
+    opportunityType,
 
     whatItIs:
       cleanString(value?.whatItIs),
@@ -201,18 +447,6 @@ function normalizeOpportunity(
     whyItIsInteresting:
       cleanString(
         value?.whyItIsInteresting
-      ),
-
-    demandEvidence:
-      cleanStringArray(
-        value?.demandEvidence,
-        8
-      ),
-
-    riskFactors:
-      cleanStringArray(
-        value?.riskFactors,
-        8
       ),
 
     targetAudience:
@@ -230,6 +464,36 @@ function normalizeOpportunity(
         value?.buyingReason
       ),
 
+    demandEvidence:
+      cleanStringArray(
+        value?.demandEvidence,
+        10
+      ),
+
+    monetizationEvidence:
+      cleanStringArray(
+        value?.monetizationEvidence,
+        10
+      ),
+
+    competitionEvidence:
+      cleanStringArray(
+        value?.competitionEvidence,
+        8
+      ),
+
+    verificationGaps:
+      cleanStringArray(
+        value?.verificationGaps,
+        10
+      ),
+
+    riskFactors:
+      cleanStringArray(
+        value?.riskFactors,
+        10
+      ),
+
     sourceName:
       cleanString(value?.sourceName),
 
@@ -241,13 +505,16 @@ function normalizeOpportunity(
         value?.sourceInstructions
       ),
 
-    affiliateProgramKnown:
-      value?.affiliateProgramKnown ===
-      true,
+    affiliateProgramKnown,
 
     affiliateProgramName:
       cleanString(
         value?.affiliateProgramName
+      ),
+
+    affiliateProgramUrl:
+      cleanString(
+        value?.affiliateProgramUrl
       ),
 
     affiliateInstructions:
@@ -255,34 +522,69 @@ function normalizeOpportunity(
         value?.affiliateInstructions
       ),
 
-    estimatedPriceRange:
-      cleanString(
-        value?.estimatedPriceRange
-      ),
-
     commissionInformation:
       cleanString(
         value?.commissionInformation
       ),
 
-    trendScore:
-      clampScore(value?.trendScore),
+    commissionVerified,
 
-    monetizationScore:
-      clampScore(
-        value?.monetizationScore
+    estimatedPriceRange:
+      cleanString(
+        value?.estimatedPriceRange
       ),
 
-    contentScore:
-      clampScore(value?.contentScore),
+    startupCost:
+      cleanString(value?.startupCost),
 
-    competitionScore:
-      clampScore(
-        value?.competitionScore
+    approvalRequirements:
+      cleanString(
+        value?.approvalRequirements
       ),
 
-    overallScore:
-      clampScore(value?.overallScore),
+    expectedLaunchDifficulty:
+      cleanString(
+        value?.expectedLaunchDifficulty
+      ),
+
+    speedToLaunch:
+      cleanString(
+        value?.speedToLaunch
+      ),
+
+    verificationStatus,
+
+    facelessVideoFit: {
+      score:
+        clampScore(
+          facelessVideoFit?.score
+        ),
+
+      reason:
+        cleanString(
+          facelessVideoFit?.reason
+        ),
+
+      demoPossible:
+        cleanBoolean(
+          facelessVideoFit?.demoPossible
+        ),
+
+      productVisualsAvailable:
+        cleanBoolean(
+          facelessVideoFit
+            ?.productVisualsAvailable
+        ),
+
+      contentAngles:
+        cleanStringArray(
+          facelessVideoFit
+            ?.contentAngles,
+          8
+        ),
+    },
+
+    scores,
 
     recommendedOffer:
       cleanString(
@@ -291,8 +593,12 @@ function normalizeOpportunity(
 
     stanStorePlan: {
       shouldUseStanStore:
-        stanStorePlan
-          ?.shouldUseStanStore === true,
+        cleanBoolean(
+          stanStorePlan
+            ?.shouldUseStanStore
+        ),
+
+      role: stanRole,
 
       productTitle:
         cleanString(
@@ -334,14 +640,14 @@ function normalizeOpportunity(
       hookIdeas:
         cleanStringArray(
           marketingPlan?.hookIdeas,
-          6
+          8
         ),
 
       contentIdeas:
         cleanStringArray(
           marketingPlan
             ?.contentIdeas,
-          6
+          8
         ),
 
       recommendedPlatforms:
@@ -358,8 +664,105 @@ function normalizeOpportunity(
         ),
     },
 
+    firstMoneyTest: {
+      objective:
+        cleanString(
+          firstMoneyTest?.objective
+        ),
+
+      contentCount:
+        cleanPositiveInteger(
+          firstMoneyTest?.contentCount,
+          5
+        ),
+
+      testPeriod:
+        cleanString(
+          firstMoneyTest?.testPeriod
+        ),
+
+      successSignal:
+        cleanString(
+          firstMoneyTest?.successSignal
+        ),
+
+      stopSignal:
+        cleanString(
+          firstMoneyTest?.stopSignal
+        ),
+    },
+
     nextMove:
       cleanString(value?.nextMove),
+  };
+}
+
+function buildRecommendation(
+  opportunities: Opportunity[],
+  parsedRecommendation: any
+): OpportunityReport["recommendation"] {
+  const winner =
+    opportunities[0];
+
+  if (!winner) {
+    return {
+      bestOpportunity: "",
+      reason:
+        "KAI did not find an opportunity with enough evidence to recommend.",
+      whyItWon: [],
+      firstAction:
+        "Run additional live research before choosing an offer.",
+      confidence: 0,
+      readyToAct: false,
+      blockingVerification: [
+        "No qualified opportunity was returned.",
+      ],
+    };
+  }
+
+  const blockingVerification =
+    winner.verificationGaps;
+
+  const readyToAct =
+    winner.verificationStatus ===
+      "verified" &&
+    (
+      winner.opportunityType !==
+        "affiliate" ||
+      winner.affiliateProgramKnown
+    ) &&
+    winner.scores.overall >= 65;
+
+  return {
+    bestOpportunity:
+      winner.productName,
+
+    reason:
+      cleanString(
+        parsedRecommendation?.reason
+      ) ||
+      winner.whyItIsInteresting,
+
+    whyItWon:
+      cleanStringArray(
+        parsedRecommendation?.whyItWon,
+        8
+      ),
+
+    firstAction:
+      cleanString(
+        parsedRecommendation
+          ?.firstAction
+      ) ||
+      winner.nextMove,
+
+    confidence:
+      winner.scores
+        .verificationConfidence,
+
+    readyToAct,
+
+    blockingVerification,
   };
 }
 
@@ -398,30 +801,67 @@ async function analyzeOpportunities({
 
         instructions: [
           "You are KAI, the operating intelligence inside KWEVORA OS.",
-          "The brand name is KWEVORA. Always spell it exactly K-W-E-V-O-R-A.",
+          "Always spell KWEVORA exactly K-W-E-V-O-R-A.",
           "You are operating in KWEVORA MONEY MODE.",
-          "Your current mission is to help operate and grow a real digital and affiliate marketing business.",
-          "Your job is not to produce generic business ideas.",
-          "Your job is to evaluate supplied current research and identify practical opportunities that could realistically be monetized.",
-          "Never claim something is trending, viral, bestselling, or hot unless the supplied research provides evidence for that claim.",
-          "Never invent sales numbers, search volume, commission rates, affiliate programs, product prices, brand partnerships, supplier relationships, or marketplace availability.",
-          "If a fact is unknown, clearly mark it unknown or say it needs verification.",
-          "Never tell the user they are allowed to resell a product unless the supplied research establishes that right.",
-          "Affiliate promotion and product resale are different business models. Keep them separate.",
-          "A Stan Store listing must not falsely imply that an affiliate product belongs to the user.",
-          "When Stan Store is useful, explain whether it should function as a destination, lead magnet, digital product storefront, or bridge to a legitimate affiliate destination.",
-          "Prioritize opportunities using evidence, monetization potential, content potential, competition, audience fit, and practical difficulty.",
-          "High trend interest does not automatically mean high monetization potential.",
-          "Prefer opportunities that can be tested quickly and cheaply.",
-          "Protect KWEVORA's credibility. Avoid deceptive claims, fake scarcity, fake testimonials, copied products, trademark misuse, or misleading advertising.",
-          "Marketing recommendations must be specific to the opportunity.",
-          "Return the strongest opportunities first.",
+          "Your mission is to help run a real digital and affiliate marketing business that needs to reach revenue as efficiently as reasonably possible.",
+          "",
+          "You are evaluating CURRENT RESEARCH gathered by KWEVORA.",
+          "Do not rely on model memory for claims about what is currently trending, selling, priced, available, or accepting affiliates.",
+          "Every important factual claim must be supported by the supplied research.",
+          "If the research does not establish a fact, mark it unknown and add it to verificationGaps.",
+          "",
+          "Do not invent affiliate programs.",
+          "Do not invent commission rates.",
+          "Do not invent cookie windows.",
+          "Do not invent prices.",
+          "Do not invent sales volume.",
+          "Do not invent search volume.",
+          "Do not invent approval requirements.",
+          "Do not invent reseller rights.",
+          "",
+          "Affiliate promotion and product resale are different. Never blur them.",
+          "Never tell the user to list an affiliate company's product in Stan Store as though the product belongs to the user.",
+          "For affiliate offers, Stan Store may be useful as a bridge, lead magnet, or owned digital-product destination when appropriate.",
+          "",
+          "KWEVORA is currently being used by a new digital/affiliate marketer who wants low startup cost and strong faceless short-form video potential.",
+          "Prefer opportunities that can be tested without buying inventory.",
+          "Prefer opportunities with a clear legitimate monetization path.",
+          "Prefer opportunities that can be launched quickly.",
+          "Prefer opportunities capable of producing multiple distinct short-form video angles.",
+          "Penalize opportunities that depend on unverified affiliate availability.",
+          "Penalize opportunities with weak evidence of buyer demand.",
+          "Penalize opportunities requiring large upfront cost.",
+          "Penalize opportunities that are difficult to demonstrate or market faceless.",
+          "Penalize opportunities where trademark, copyright, advertising, health, financial, or platform-policy risks are unusually high.",
+          "",
+          "Do not recommend a product simply because it is popular.",
+          "The question is whether this user can realistically monetize attention around it.",
+          "",
+          "SCORING RULES:",
+          "All component scores are integers from 0 to 100.",
+          "demand = strength and freshness of evidence that buyers care.",
+          "monetization = clarity and attractiveness of the legitimate earning path.",
+          "contentPotential = ability to make persuasive varied marketing content.",
+          "competition = higher is BETTER; score high when a new marketer has a realistic angle despite competition.",
+          "audienceFit = clarity of buyer and problem/desire.",
+          "startupEase = higher when little money, setup, or inventory is required.",
+          "speedToLaunch = higher when the opportunity can realistically be promoted quickly.",
+          "verificationConfidence = how much of the important business information is actually supported by supplied research.",
+          "",
+          "FACELESS VIDEO RULES:",
+          "Evaluate whether this opportunity can produce compelling faceless TikTok, YouTube Shorts, Instagram Reels, and similar short-form content.",
+          "Think about screen recordings, demonstrations, transformations, comparisons, before/after workflows, problem/solution storytelling, product footage the marketer may legitimately use, text-driven videos, and other scroll-stopping formats.",
+          "Do not assume copyrighted third-party footage can be reused.",
+          "",
+          "FIRST MONEY TEST:",
+          "Design a small validation campaign before KWEVORA commits heavily.",
+          "The test should define how many pieces of content to publish, roughly how long to test, what signal means continue, and what signal means stop or change angle.",
+          "",
           "Return no more than five opportunities.",
-          "Scores must be integers from 0 to 100.",
-          "For competitionScore, a higher number means a more favorable competitive situation, not more competition.",
-          "Use plain conversational language.",
-          "Return only the required structured JSON.",
-        ].join(" "),
+          "Return strongest candidates first.",
+          "Use plain language.",
+          "Return only the required JSON.",
+        ].join("\n"),
 
         input: [
           {
@@ -432,16 +872,19 @@ async function analyzeOpportunities({
                 type: "input_text",
 
                 text: [
-                  "KWEVORA MONEY MODE RESEARCH REQUEST",
+                  "KWEVORA MONEY MODE — OPPORTUNITY INTELLIGENCE V2",
                   "",
-                  `Niche: ${niche || "Open — find the strongest opportunity."}`,
+                  `Niche: ${niche || "Open — compare the strongest researched opportunities."}`,
                   `Audience: ${audience || "Not predetermined."}`,
                   `Business goal: ${goal}`,
                   `Additional notes: ${notes || "None."}`,
                   "",
-                  "CURRENT RESEARCH:",
-                  research ||
-                    "No current research was supplied. Do not pretend to know what is currently hot. Return no opportunities and explain that live research is required.",
+                  "CURRENT LIVE RESEARCH:",
+                  research,
+                  "",
+                  "Evaluate the candidates using only what this research can support.",
+                  "If a promising candidate still needs verification, keep it in the report but clearly identify the missing facts.",
+                  "Do not tell KWEVORA to act as though an unverified affiliate program is confirmed.",
                 ].join("\n"),
               },
             ],
@@ -453,7 +896,7 @@ async function analyzeOpportunities({
             type: "json_schema",
 
             name:
-              "kwevora_money_mode_opportunity_report",
+              "kwevora_money_mode_opportunity_intelligence_v2",
 
             strict: true,
 
@@ -475,12 +918,15 @@ async function analyzeOpportunities({
                     false,
 
                   properties: {
-                    bestOpportunity: {
+                    reason: {
                       type: "string",
                     },
 
-                    reason: {
-                      type: "string",
+                    whyItWon: {
+                      type: "array",
+                      items: {
+                        type: "string",
+                      },
                     },
 
                     firstAction: {
@@ -489,8 +935,8 @@ async function analyzeOpportunities({
                   },
 
                   required: [
-                    "bestOpportunity",
                     "reason",
+                    "whyItWon",
                     "firstAction",
                   ],
                 },
@@ -539,22 +985,6 @@ async function analyzeOpportunities({
                         type: "string",
                       },
 
-                      demandEvidence: {
-                        type: "array",
-
-                        items: {
-                          type: "string",
-                        },
-                      },
-
-                      riskFactors: {
-                        type: "array",
-
-                        items: {
-                          type: "string",
-                        },
-                      },
-
                       targetAudience: {
                         type: "string",
                       },
@@ -565,6 +995,41 @@ async function analyzeOpportunities({
 
                       buyingReason: {
                         type: "string",
+                      },
+
+                      demandEvidence: {
+                        type: "array",
+                        items: {
+                          type: "string",
+                        },
+                      },
+
+                      monetizationEvidence: {
+                        type: "array",
+                        items: {
+                          type: "string",
+                        },
+                      },
+
+                      competitionEvidence: {
+                        type: "array",
+                        items: {
+                          type: "string",
+                        },
+                      },
+
+                      verificationGaps: {
+                        type: "array",
+                        items: {
+                          type: "string",
+                        },
+                      },
+
+                      riskFactors: {
+                        type: "array",
+                        items: {
+                          type: "string",
+                        },
                       },
 
                       sourceName: {
@@ -587,11 +1052,11 @@ async function analyzeOpportunities({
                         type: "string",
                       },
 
-                      affiliateInstructions: {
+                      affiliateProgramUrl: {
                         type: "string",
                       },
 
-                      estimatedPriceRange: {
+                      affiliateInstructions: {
                         type: "string",
                       },
 
@@ -599,34 +1064,148 @@ async function analyzeOpportunities({
                         type: "string",
                       },
 
-                      trendScore: {
-                        type: "integer",
-                        minimum: 0,
-                        maximum: 100,
+                      commissionVerified: {
+                        type: "boolean",
                       },
 
-                      monetizationScore: {
-                        type: "integer",
-                        minimum: 0,
-                        maximum: 100,
+                      estimatedPriceRange: {
+                        type: "string",
                       },
 
-                      contentScore: {
-                        type: "integer",
-                        minimum: 0,
-                        maximum: 100,
+                      startupCost: {
+                        type: "string",
                       },
 
-                      competitionScore: {
-                        type: "integer",
-                        minimum: 0,
-                        maximum: 100,
+                      approvalRequirements: {
+                        type: "string",
                       },
 
-                      overallScore: {
-                        type: "integer",
-                        minimum: 0,
-                        maximum: 100,
+                      expectedLaunchDifficulty: {
+                        type: "string",
+                      },
+
+                      speedToLaunch: {
+                        type: "string",
+                      },
+
+                      verificationStatus: {
+                        type: "string",
+
+                        enum: [
+                          "verified",
+                          "partially_verified",
+                          "unverified",
+                        ],
+                      },
+
+                      facelessVideoFit: {
+                        type: "object",
+
+                        additionalProperties:
+                          false,
+
+                        properties: {
+                          score: {
+                            type: "integer",
+                            minimum: 0,
+                            maximum: 100,
+                          },
+
+                          reason: {
+                            type: "string",
+                          },
+
+                          demoPossible: {
+                            type: "boolean",
+                          },
+
+                          productVisualsAvailable: {
+                            type: "boolean",
+                          },
+
+                          contentAngles: {
+                            type: "array",
+                            items: {
+                              type: "string",
+                            },
+                          },
+                        },
+
+                        required: [
+                          "score",
+                          "reason",
+                          "demoPossible",
+                          "productVisualsAvailable",
+                          "contentAngles",
+                        ],
+                      },
+
+                      scores: {
+                        type: "object",
+
+                        additionalProperties:
+                          false,
+
+                        properties: {
+                          demand: {
+                            type: "integer",
+                            minimum: 0,
+                            maximum: 100,
+                          },
+
+                          monetization: {
+                            type: "integer",
+                            minimum: 0,
+                            maximum: 100,
+                          },
+
+                          contentPotential: {
+                            type: "integer",
+                            minimum: 0,
+                            maximum: 100,
+                          },
+
+                          competition: {
+                            type: "integer",
+                            minimum: 0,
+                            maximum: 100,
+                          },
+
+                          audienceFit: {
+                            type: "integer",
+                            minimum: 0,
+                            maximum: 100,
+                          },
+
+                          startupEase: {
+                            type: "integer",
+                            minimum: 0,
+                            maximum: 100,
+                          },
+
+                          speedToLaunch: {
+                            type: "integer",
+                            minimum: 0,
+                            maximum: 100,
+                          },
+
+                          verificationConfidence: {
+                            type: "integer",
+                            minimum: 0,
+                            maximum: 100,
+                          },
+                        },
+
+                        required: [
+                          "demand",
+                          "monetization",
+                          "contentPotential",
+                          "competition",
+                          "audienceFit",
+                          "startupEase",
+                          "speedToLaunch",
+                          "verificationConfidence",
+                        ],
                       },
 
                       recommendedOffer: {
@@ -642,6 +1221,18 @@ async function analyzeOpportunities({
                         properties: {
                           shouldUseStanStore: {
                             type: "boolean",
+                          },
+
+                          role: {
+                            type: "string",
+
+                            enum: [
+                              "affiliate_bridge",
+                              "lead_magnet",
+                              "digital_product",
+                              "direct_offer",
+                              "not_needed",
+                            ],
                           },
 
                           productTitle: {
@@ -662,7 +1253,6 @@ async function analyzeOpportunities({
 
                           setupInstructions: {
                             type: "array",
-
                             items: {
                               type: "string",
                             },
@@ -671,6 +1261,7 @@ async function analyzeOpportunities({
 
                         required: [
                           "shouldUseStanStore",
+                          "role",
                           "productTitle",
                           "productDescription",
                           "callToAction",
@@ -692,7 +1283,6 @@ async function analyzeOpportunities({
 
                           hookIdeas: {
                             type: "array",
-
                             items: {
                               type: "string",
                             },
@@ -700,7 +1290,6 @@ async function analyzeOpportunities({
 
                           contentIdeas: {
                             type: "array",
-
                             items: {
                               type: "string",
                             },
@@ -708,7 +1297,6 @@ async function analyzeOpportunities({
 
                           recommendedPlatforms: {
                             type: "array",
-
                             items: {
                               type: "string",
                             },
@@ -728,6 +1316,44 @@ async function analyzeOpportunities({
                         ],
                       },
 
+                      firstMoneyTest: {
+                        type: "object",
+
+                        additionalProperties:
+                          false,
+
+                        properties: {
+                          objective: {
+                            type: "string",
+                          },
+
+                          contentCount: {
+                            type: "integer",
+                            minimum: 1,
+                          },
+
+                          testPeriod: {
+                            type: "string",
+                          },
+
+                          successSignal: {
+                            type: "string",
+                          },
+
+                          stopSignal: {
+                            type: "string",
+                          },
+                        },
+
+                        required: [
+                          "objective",
+                          "contentCount",
+                          "testPeriod",
+                          "successSignal",
+                          "stopSignal",
+                        ],
+                      },
+
                       nextMove: {
                         type: "string",
                       },
@@ -740,27 +1366,35 @@ async function analyzeOpportunities({
                       "opportunityType",
                       "whatItIs",
                       "whyItIsInteresting",
-                      "demandEvidence",
-                      "riskFactors",
                       "targetAudience",
                       "audienceProblem",
                       "buyingReason",
+                      "demandEvidence",
+                      "monetizationEvidence",
+                      "competitionEvidence",
+                      "verificationGaps",
+                      "riskFactors",
                       "sourceName",
                       "sourceType",
                       "sourceInstructions",
                       "affiliateProgramKnown",
                       "affiliateProgramName",
+                      "affiliateProgramUrl",
                       "affiliateInstructions",
-                      "estimatedPriceRange",
                       "commissionInformation",
-                      "trendScore",
-                      "monetizationScore",
-                      "contentScore",
-                      "competitionScore",
-                      "overallScore",
+                      "commissionVerified",
+                      "estimatedPriceRange",
+                      "startupCost",
+                      "approvalRequirements",
+                      "expectedLaunchDifficulty",
+                      "speedToLaunch",
+                      "verificationStatus",
+                      "facelessVideoFit",
+                      "scores",
                       "recommendedOffer",
                       "stanStorePlan",
                       "marketingPlan",
+                      "firstMoneyTest",
                       "nextMove",
                     ],
                   },
@@ -829,8 +1463,8 @@ async function analyzeOpportunities({
               first: Opportunity,
               second: Opportunity
             ) =>
-              second.overallScore -
-              first.overallScore
+              second.scores.overall -
+              first.scores.overall
           )
           .map(
             (
@@ -857,25 +1491,11 @@ async function analyzeOpportunities({
         parsed?.researchSummary
       ),
 
-    recommendation: {
-      bestOpportunity:
-        cleanString(
-          parsed?.recommendation
-            ?.bestOpportunity
-        ),
-
-      reason:
-        cleanString(
-          parsed?.recommendation
-            ?.reason
-        ),
-
-      firstAction:
-        cleanString(
-          parsed?.recommendation
-            ?.firstAction
-        ),
-    },
+    recommendation:
+      buildRecommendation(
+        opportunities,
+        parsed?.recommendation
+      ),
 
     opportunities,
   };
@@ -891,13 +1511,19 @@ export async function GET() {
     status: "ready",
 
     mission:
-      "Find, evaluate, and turn real market opportunities into income-producing actions.",
+      "Find, verify, score, and turn real market opportunities into income-producing actions.",
 
     liveResearchConnected:
-      false,
+      true,
+
+    intelligenceVersion:
+      "Opportunity Intelligence v2",
+
+    scoring:
+      "KWEVORA-calculated weighted scoring with verification penalties.",
 
     nextCapability:
-      "Connect current market research sources.",
+      "Deep-verify finalists before campaign execution.",
   });
 }
 
@@ -944,14 +1570,6 @@ export async function POST(
     const research =
       cleanString(body.research);
 
-    /*
-     * IMPORTANT:
-     *
-     * KAI does not pretend its model knowledge
-     * represents today's market.
-     *
-     * Live research will be connected next.
-     */
     if (!research) {
       return NextResponse.json({
         success: true,
@@ -963,7 +1581,7 @@ export async function POST(
           true,
 
         message:
-          "KAI is ready to evaluate opportunities, but current market research must be collected before it can truthfully identify what is hot right now.",
+          "KAI needs current market research before it can truthfully choose a money opportunity.",
 
         nextAction:
           "Run KWEVORA live opportunity research.",
@@ -986,7 +1604,7 @@ export async function POST(
     });
   } catch (error) {
     console.error(
-      "KWEVORA opportunity analysis failed:",
+      "KWEVORA Opportunity Intelligence v2 failed:",
       error
     );
 

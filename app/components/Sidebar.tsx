@@ -8,41 +8,68 @@ const items = [
     href: "/",
     icon: "🏠",
     label: "Home",
-    matchingPaths: ["/", "/dashboard", "/overnight", "/review", "/publishing"],
+    matchingPaths: [
+      "/",
+      "/dashboard",
+      "/overnight",
+      "/publishing",
+    ],
   },
   {
     href: "/video-studio",
     icon: "➕",
     label: "Create",
-    matchingPaths: ["/video-studio", "/hook-generator"],
+    matchingPaths: [
+      "/video-studio",
+      "/hook-generator",
+    ],
+  },
+  {
+    href: "/money-mode",
+    icon: "💰",
+    label: "Money Mode",
+    matchingPaths: [
+      "/money-mode",
+    ],
   },
   {
     href: "/kai",
     icon: "📊",
     label: "Business",
-    matchingPaths: ["/kai", "/game-plan"],
+    matchingPaths: [
+      "/kai",
+      "/game-plan",
+    ],
   },
   {
     href: "/review",
     icon: "📚",
     label: "Library",
-    matchingPaths: ["/review"],
+    matchingPaths: [
+      "/review",
+    ],
   },
   {
     href: "/settings",
     icon: "⚙️",
     label: "Settings",
-    matchingPaths: ["/settings"],
+    matchingPaths: [
+      "/settings",
+    ],
   },
 ];
 
 export default function Sidebar() {
-  const pathname = usePathname();
+  const pathname =
+    usePathname();
 
   return (
     <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-[#05030d] px-5 py-7">
       <div>
-        <Link href="/" className="block">
+        <Link
+          href="/"
+          className="block"
+        >
           <h1 className="text-xl font-black tracking-[0.32em] text-purple-300">
             KWEVORA
           </h1>
@@ -50,13 +77,27 @@ export default function Sidebar() {
 
         <nav className="mt-10 space-y-2">
           {items.map((item) => {
-            const active = item.matchingPaths.some((path) => {
-              if (path === "/") {
-                return pathname === "/";
-              }
+            const active =
+              item.matchingPaths.some(
+                (path) => {
+                  if (
+                    path === "/"
+                  ) {
+                    return (
+                      pathname ===
+                      "/"
+                    );
+                  }
 
-              return pathname === path || pathname.startsWith(`${path}/`);
-            });
+                  return (
+                    pathname ===
+                      path ||
+                    pathname.startsWith(
+                      `${path}/`
+                    )
+                  );
+                }
+              );
 
             return (
               <Link
@@ -72,7 +113,9 @@ export default function Sidebar() {
                   {item.icon}
                 </span>
 
-                <span className="font-bold">{item.label}</span>
+                <span className="font-bold">
+                  {item.label}
+                </span>
               </Link>
             );
           })}
@@ -83,14 +126,18 @@ export default function Sidebar() {
         <div className="flex items-center gap-3">
           <span className="relative flex h-3 w-3 shrink-0">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-60" />
+
             <span className="relative inline-flex h-3 w-3 rounded-full bg-green-500" />
           </span>
 
           <div>
-            <p className="font-bold text-green-300">KAI is working</p>
+            <p className="font-bold text-green-300">
+              KAI is working
+            </p>
 
             <p className="mt-1 text-xs leading-5 text-gray-400">
-              Preparing your next completed task.
+              Preparing your next
+              completed task.
             </p>
           </div>
         </div>
