@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { promises as fs } from "fs";
+import path from "path";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,22 +10,150 @@ type MoneyModeRequest = {
   audience?: string;
   goal?: string;
   notes?: string;
-
-  /*
-   * Used by the future overnight runner.
-   * It can tell KAI what was already rejected
-   * so the next hunt does not keep repeating it.
-   */
   previouslyRejected?: string[];
 };
 
+type LicenseType =
+  | "mrr"
+  | "plr"
+  | "resell_rights"
+  | "commercial_resale"
+  | "other"
+  | "unknown";
+
 type Opportunity = {
+  rank?: number;
   productName?: string;
   brand?: string;
+  category?: string;
   opportunityType?: string;
-  affiliateProgramName?: string;
-  affiliateProgramUrl?: string;
   whatItIs?: string;
+  whyItIsInteresting?: string;
+
+  targetAudience?: string;
+  audienceProblem?: string;
+  buyingReason?: string;
+
+  demandEvidence?: string[];
+  competitionEvidence?: string[];
+  qualityEvidence?: string[];
+  verificationGaps?: string[];
+  riskFactors?: string[];
+
+  source?: {
+    sellerName?: string;
+    marketplace?: string;
+    productUrl?: string;
+    sourceReputation?: string;
+  };
+
+  license?: {
+    type?: LicenseType;
+    licenseUrl?: string;
+    licenseEvidence?: string[];
+    resaleToEndCustomersAllowed?: boolean;
+    resaleRightsVerified?: boolean;
+    rebrandingAllowed?: boolean;
+    modificationAllowed?: boolean;
+    passResaleRightsAllowed?: boolean;
+    giveawayAllowed?: boolean;
+    bundlingAllowed?: boolean;
+    marketplaceRestrictions?: string;
+    advertisingRestrictions?: string;
+    minimumPriceRule?: string;
+    otherRestrictions?: string[];
+  };
+
+  economics?: {
+    acquisitionCost?: string;
+    acquisitionCostVerified?: boolean;
+    resalePrice?: string;
+    resalePriceVerified?: boolean;
+    estimatedMargin?: string;
+    recurringCost?: string;
+  };
+
+  productQuality?: {
+    score?: number;
+    reason?: string;
+    freshness?: string;
+    professionalism?: string;
+    completeness?: string;
+    customerFeedback?: string;
+  };
+
+  saturation?: {
+    score?: number;
+    reason?: string;
+    identicalCopyRisk?: string;
+    differentiationIdeas?: string[];
+  };
+
+  facelessVideoFit?: {
+    score?: number;
+    reason?: string;
+    demoPossible?: boolean;
+    productVisualsAvailable?: boolean;
+    contentAngles?: string[];
+  };
+
+  verificationStatus?: string;
+
+  scores?: {
+    demand?: number;
+    resaleRights?: number;
+    marginPotential?: number;
+    productQuality?: number;
+    contentPotential?: number;
+    competition?: number;
+    audienceFit?: number;
+    startupEase?: number;
+    speedToLaunch?: number;
+    verificationConfidence?: number;
+    overall?: number;
+  };
+
+  stanStorePlan?: {
+    shouldUseStanStore?: boolean;
+    productTitle?: string;
+    productDescription?: string;
+    suggestedPrice?: string;
+    callToAction?: string;
+    deliveryStrategy?: string;
+    setupInstructions?: string[];
+  };
+
+  marketingPlan?: {
+    primaryAngle?: string;
+    hookIdeas?: string[];
+    contentIdeas?: string[];
+    recommendedPlatforms?: string[];
+    callToAction?: string;
+  };
+
+  firstMoneyTest?: {
+    objective?: string;
+    contentCount?: number;
+    testPeriod?: string;
+    successSignal?: string;
+    stopSignal?: string;
+  };
+
+  nextMove?: string;
+};
+
+type VerificationCandidateInput = {
+  productName: string;
+  brand: string;
+  opportunityType: string;
+  whatItIs: string;
+  sourceUrl: string;
+  seller: string;
+  licenseType: string;
+  licenseUrl: string;
+  acquisitionCost: string;
+  resalePrice: string;
+  unresolvedFacts?: string[];
 };
 
 type HuntAttempt = {
@@ -32,19 +162,137 @@ type HuntAttempt = {
   opportunityCount: number;
   finalists: string[];
   verificationRounds: number;
-  result:
-    | "verified"
-    | "blocked"
-    | "no_opportunities";
+  result: "verified" | "blocked" | "no_opportunities";
   rejected: string[];
 };
 
 const MAX_HUNT_ATTEMPTS = 3;
 
+const MONEY_HUNT_STATE_VERSION = 1;
+const MONEY_HUNT_STATE_FILE = path.join(
+  process.cwd(),
+  ".kwevora",
+  "money-hunt-state.json"
+);
+
+type PersistentMoneyHuntState = {
+  version: number;
+  cycleCount: number;
+  consecutiveCyclesWithoutWinner: number;
+  lastCycleAt: string | null;
+  lastWinnerAt: string | null;
+  lastWinner: string | null;
+  rejectedCandidates: string[];
+  recentStrategies: string[];
+};
+
+function defaultMoneyHuntState(): PersistentMoneyHuntState {
+  return {
+    version: MONEY_HUNT_STATE_VERSION,
+    cycleCount: 0,
+    consecutiveCyclesWithoutWinner: 0,
+    lastCycleAt: null,
+    lastWinnerAt: null,
+    lastWinner: null,
+    rejectedCandidates: [],
+    recentStrategies: [],
+  };
+}
+
+async function loadMoneyHuntState(): Promise<PersistentMoneyHuntState> {
+  try {
+    const raw = await fs.readFile(
+      MONEY_HUNT_STATE_FILE,
+      "utf8"
+    );
+
+    const parsed = JSON.parse(raw);
+
+    return {
+      version: MONEY_HUNT_STATE_VERSION,
+      cycleCount: Number(parsed?.cycleCount ?? 0),
+      consecutiveCyclesWithoutWinner: Number(
+        parsed?.consecutiveCyclesWithoutWinner ?? 0
+      ),
+      lastCycleAt:
+        typeof parsed?.lastCycleAt === "string"
+          ? parsed.lastCycleAt
+          : null,
+      lastWinnerAt:
+        typeof parsed?.lastWinnerAt === "string"
+          ? parsed.lastWinnerAt
+          : null,
+      lastWinner:
+        typeof parsed?.lastWinner === "string"
+          ? parsed.lastWinner
+          : null,
+      rejectedCandidates: cleanStringArray(
+        parsed?.rejectedCandidates,
+        500
+      ),
+      recentStrategies: cleanStringArray(
+        parsed?.recentStrategies,
+        25
+      ),
+    };
+  } catch {
+    return defaultMoneyHuntState();
+  }
+}
+
+async function saveMoneyHuntState(
+  state: PersistentMoneyHuntState
+): Promise<void> {
+  await fs.mkdir(
+    path.dirname(MONEY_HUNT_STATE_FILE),
+    { recursive: true }
+  );
+
+  await fs.writeFile(
+    MONEY_HUNT_STATE_FILE,
+    JSON.stringify(state, null, 2),
+    "utf8"
+  );
+}
+
+function buildPersistentSearchDirective(
+  state: PersistentMoneyHuntState
+): string {
+  const misses =
+    state.consecutiveCyclesWithoutWinner;
+
+  if (misses >= 6) {
+    return [
+      "KWEVORA has gone multiple autonomous cycles without a verified winner.",
+      "Change the search pattern substantially instead of repeating prior marketplaces, sellers, product styles, or demand pockets.",
+      "Expand into fresh high-demand digital categories and prioritize products whose exact resale license is publicly inspectable before purchase.",
+      "Do not lower the license, demand, quality, margin, or verification gates.",
+    ].join(" ");
+  }
+
+  if (misses >= 3) {
+    return [
+      "Several autonomous cycles have ended without a verified winner.",
+      "Broaden into new product categories, sellers, marketplaces, price points, and buyer-demand pockets.",
+      "Prefer products with unusually clear resale-rights evidence and avoid repeating previously rejected candidates.",
+    ].join(" ");
+  }
+
+  if (misses >= 1) {
+    return [
+      "The previous autonomous cycle did not produce a verified winner.",
+      "Continue with fresh products and fresh evidence rather than restarting the same search.",
+    ].join(" ");
+  }
+
+  return [
+    "This is the first persistent autonomous search cycle.",
+    "Search broadly while maintaining KWEVORA's hard verification standards.",
+  ].join(" ");
+}
+
 function cleanString(value: unknown): string {
-  return typeof value === "string"
-    ? value.trim()
-    : "";
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function cleanStringArray(
@@ -57,21 +305,21 @@ function cleanStringArray(
 
   return value
     .filter(
-      (item): item is string =>
+      (item: unknown): item is string =>
         typeof item === "string"
     )
-    .map((item) => item.trim())
+    .map((item: string) => item.trim())
     .filter(Boolean)
     .slice(0, max);
 }
 
-function getBaseUrl(request: NextRequest) {
+function getBaseUrl(request: NextRequest): string {
   return request.nextUrl.origin;
 }
 
 async function readJsonSafely(
   response: Response
-) {
+): Promise<any> {
   const text = await response.text();
 
   if (!text) {
@@ -87,112 +335,91 @@ async function readJsonSafely(
   }
 }
 
+function normalizeIdentity(value: string): string {
+  return value.trim().toLowerCase();
+}
+
 function opportunityIdentity(
   opportunity: Opportunity
-) {
+): string {
   const product =
-    cleanString(
-      opportunity.productName
-    );
+    cleanString(opportunity.productName);
 
-  const brand =
+  const seller =
     cleanString(
-      opportunity.brand
-    );
+      opportunity.source?.sellerName
+    ) ||
+    cleanString(opportunity.brand);
 
-  if (product && brand) {
-    return `${brand} — ${product}`;
+  if (product && seller) {
+    return `${seller} — ${product}`;
   }
 
-  return product || brand;
+  return product || seller;
 }
 
 function candidateIdentity(
   candidate: any
-) {
+): string {
   const product =
-    cleanString(
-      candidate?.productName
-    );
+    cleanString(candidate?.productName);
 
   const brand =
-    cleanString(
-      candidate?.brand
-    );
+    cleanString(candidate?.brand) ||
+    cleanString(candidate?.source?.seller);
 
   if (product && brand) {
     return `${brand} — ${product}`;
   }
 
   return product || brand;
-}
-
-function normalizeIdentity(
-  value: string
-) {
-  return value
-    .trim()
-    .toLowerCase();
 }
 
 function isPreviouslyRejected(
   opportunity: Opportunity,
   rejected: Set<string>
-) {
-  const identity =
-    normalizeIdentity(
-      opportunityIdentity(
-        opportunity
-      )
-    );
+): boolean {
+  const identity = normalizeIdentity(
+    opportunityIdentity(opportunity)
+  );
 
-  const product =
-    normalizeIdentity(
-      cleanString(
-        opportunity.productName
-      )
-    );
+  const product = normalizeIdentity(
+    cleanString(opportunity.productName)
+  );
 
-  const brand =
-    normalizeIdentity(
-      cleanString(
-        opportunity.brand
-      )
-    );
+  const seller = normalizeIdentity(
+    cleanString(
+      opportunity.source?.sellerName
+    ) ||
+      cleanString(opportunity.brand)
+  );
 
   return (
     rejected.has(identity) ||
-    (product
-      ? rejected.has(product)
-      : false) ||
-    (brand
-      ? rejected.has(brand)
-      : false)
+    (product ? rejected.has(product) : false) ||
+    (seller ? rejected.has(seller) : false)
   );
 }
 
 function matchVerifiedWinner(
   candidates: any[],
   strongestName: string
-) {
+): any | null {
   const target =
-    normalizeIdentity(
-      strongestName
-    );
+    normalizeIdentity(strongestName);
 
-  /*
-   * First trust only candidates that
-   * themselves passed KWEVORA's gate.
-   */
   const readyCandidates =
     candidates.filter(
       (candidate: any) =>
-        candidate
-          ?.readyForTesting ===
+        candidate?.readyForTesting ===
           true &&
-        candidate
-          ?.verificationStatus ===
-          "verified"
+        candidate?.verificationStatus ===
+          "verified" &&
+        candidate?.license?.verified ===
+          true &&
+        candidate?.license
+          ?.resaleToEndCustomers ===
+          true
     );
 
   if (readyCandidates.length === 0) {
@@ -206,8 +433,7 @@ function matchVerifiedWinner(
           const productName =
             normalizeIdentity(
               cleanString(
-                candidate
-                  ?.productName
+                candidate?.productName
               )
             );
 
@@ -220,9 +446,7 @@ function matchVerifiedWinner(
 
           const identity =
             normalizeIdentity(
-              candidateIdentity(
-                candidate
-              )
+              candidateIdentity(candidate)
             );
 
           return (
@@ -238,192 +462,275 @@ function matchVerifiedWinner(
     }
   }
 
-  /*
-   * If the model failed to name its strongest
-   * verified candidate correctly, KWEVORA
-   * still chooses from candidates that
-   * objectively passed the gate.
-   */
   return [...readyCandidates].sort(
-    (a, b) =>
+    (a: any, b: any) =>
       Number(
-        b?.monetizationConfidence ??
-          0
+        b?.monetizationConfidence ?? 0
       ) -
       Number(
-        a?.monetizationConfidence ??
-          0
+        a?.monetizationConfidence ?? 0
       )
   )[0];
 }
 
 function buildVerificationCandidates(
   opportunities: Opportunity[]
-) {
+): VerificationCandidateInput[] {
   return opportunities
     .slice(0, 3)
-    .map((opportunity) => ({
-      productName:
-        cleanString(
-          opportunity.productName
-        ),
+    .map(
+      (
+        opportunity: Opportunity
+      ): VerificationCandidateInput => ({
+        productName:
+          cleanString(
+            opportunity.productName
+          ),
 
-      brand:
-        cleanString(
-          opportunity.brand
-        ),
+        brand:
+          cleanString(
+            opportunity.brand
+          ) ||
+          cleanString(
+            opportunity.source?.sellerName
+          ),
 
-      opportunityType:
-        cleanString(
-          opportunity
-            .opportunityType
-        ),
+        opportunityType:
+          "resellable_digital_product",
 
-      affiliateProgramName:
-        cleanString(
-          opportunity
-            .affiliateProgramName
-        ),
+        whatItIs:
+          cleanString(
+            opportunity.whatItIs
+          ),
 
-      affiliateProgramUrl:
-        cleanString(
-          opportunity
-            .affiliateProgramUrl
-        ),
+        sourceUrl:
+          cleanString(
+            opportunity.source?.productUrl
+          ),
 
-      whatItIs:
-        cleanString(
-          opportunity.whatItIs
-        ),
-    }));
+        seller:
+          cleanString(
+            opportunity.source?.sellerName
+          ) ||
+          cleanString(
+            opportunity.brand
+          ),
+
+        licenseType:
+          cleanString(
+            opportunity.license?.type
+          ),
+
+        licenseUrl:
+          cleanString(
+            opportunity.license?.licenseUrl
+          ),
+
+        acquisitionCost:
+          cleanString(
+            opportunity.economics
+              ?.acquisitionCost
+          ),
+
+        resalePrice:
+          cleanString(
+            opportunity.economics
+              ?.resalePrice
+          ),
+
+        unresolvedFacts:
+          cleanStringArray(
+            opportunity.verificationGaps,
+            20
+          ),
+      })
+    );
 }
 
 function buildReverificationCandidates(
   verifiedCandidates: any[],
   scoredOpportunities: Opportunity[]
-) {
+): VerificationCandidateInput[] {
   return verifiedCandidates
     .filter(
       (candidate: any) =>
-        candidate
-          ?.readyForTesting !==
+        candidate?.readyForTesting !==
           true &&
-        candidate
-          ?.verificationStatus !==
+        candidate?.verificationStatus !==
           "rejected"
     )
     .slice(0, 3)
-    .map((candidate: any) => {
-      const matchingOpportunity =
-        scoredOpportunities.find(
-          (opportunity) => {
-            const productMatch =
-              normalizeIdentity(
-                cleanString(
-                  opportunity
-                    .productName
-                )
-              ) ===
-              normalizeIdentity(
-                cleanString(
-                  candidate
-                    ?.productName
-                )
+    .map(
+      (
+        candidate: any
+      ): VerificationCandidateInput => {
+        const matchingOpportunity =
+          scoredOpportunities.find(
+            (
+              opportunity: Opportunity
+            ) => {
+              const productMatch =
+                normalizeIdentity(
+                  cleanString(
+                    opportunity.productName
+                  )
+                ) ===
+                normalizeIdentity(
+                  cleanString(
+                    candidate?.productName
+                  )
+                );
+
+              const sellerMatch =
+                normalizeIdentity(
+                  cleanString(
+                    opportunity.source
+                      ?.sellerName
+                  ) ||
+                    cleanString(
+                      opportunity.brand
+                    )
+                ) ===
+                normalizeIdentity(
+                  cleanString(
+                    candidate?.source?.seller
+                  ) ||
+                    cleanString(
+                      candidate?.brand
+                    )
+                );
+
+              return (
+                productMatch ||
+                sellerMatch
               );
+            }
+          );
 
-            const brandMatch =
-              normalizeIdentity(
-                cleanString(
-                  opportunity.brand
-                )
-              ) ===
-              normalizeIdentity(
-                cleanString(
-                  candidate?.brand
-                )
-              );
+        return {
+          productName:
+            cleanString(
+              candidate?.productName
+            ),
 
-            return (
-              productMatch ||
-              brandMatch
-            );
-          }
-        );
+          brand:
+            cleanString(
+              candidate?.brand
+            ) ||
+            cleanString(
+              candidate?.source?.seller
+            ),
 
-      return {
-        productName:
-          cleanString(
-            candidate
-              ?.productName
-          ),
+          opportunityType:
+            "resellable_digital_product",
 
-        brand:
-          cleanString(
-            candidate?.brand
-          ),
+          whatItIs:
+            cleanString(
+              matchingOpportunity?.whatItIs
+            ),
 
-        opportunityType:
-          cleanString(
-            matchingOpportunity
-              ?.opportunityType
-          ),
+          sourceUrl:
+            cleanString(
+              candidate?.source?.productUrl
+            ) ||
+            cleanString(
+              matchingOpportunity?.source
+                ?.productUrl
+            ),
 
-        affiliateProgramName:
-          cleanString(
-            matchingOpportunity
-              ?.affiliateProgramName
-          ),
+          seller:
+            cleanString(
+              candidate?.source?.seller
+            ) ||
+            cleanString(
+              matchingOpportunity?.source
+                ?.sellerName
+            ),
 
-        affiliateProgramUrl:
-          cleanString(
-            matchingOpportunity
-              ?.affiliateProgramUrl
-          ),
+          licenseType:
+            cleanString(
+              candidate?.license?.licenseType
+            ) ||
+            cleanString(
+              matchingOpportunity?.license
+                ?.type
+            ),
 
-        whatItIs:
-          cleanString(
-            matchingOpportunity
-              ?.whatItIs
-          ),
+          licenseUrl:
+            cleanString(
+              candidate?.license?.licenseUrl
+            ) ||
+            cleanString(
+              matchingOpportunity?.license
+                ?.licenseUrl
+            ),
 
-        unresolvedFacts:
-          cleanStringArray(
-            candidate
-              ?.unresolvedFacts,
-            20
-          ),
-      };
-    });
+          acquisitionCost:
+            cleanString(
+              candidate?.acquisition?.cost
+            ) ||
+            cleanString(
+              matchingOpportunity?.economics
+                ?.acquisitionCost
+            ),
+
+          resalePrice:
+            cleanString(
+              candidate?.resale
+                ?.suggestedPrice
+            ) ||
+            cleanString(
+              matchingOpportunity?.economics
+                ?.resalePrice
+            ),
+
+          unresolvedFacts:
+            cleanStringArray(
+              candidate?.unresolvedFacts,
+              25
+            ),
+        };
+      }
+    );
 }
 
 function buildAttemptStrategy(
   attempt: number,
-  rejected: string[]
-) {
+  persistentDirective = ""
+): string {
   if (attempt === 1) {
     return [
-      "Search broadly for the strongest practical current revenue opportunity.",
-      "Prioritize low startup cost, realistic beginner execution, strong demand, and faceless short-form marketing.",
-      "Consider affiliate offers and practical digital-marketing opportunities.",
-    ].join(" ");
+      "Search broadly for existing digital products with strong current buyer demand and legitimate resale licensing.",
+      "Demand comes first.",
+      "Prioritize low startup cost, quality products, clear resale rights, healthy margin potential, low-to-manageable saturation, and strong faceless-content potential.",
+      persistentDirective,
+    ]
+      .filter(Boolean)
+      .join(" ");
   }
 
   if (attempt === 2) {
     return [
-      "The first candidates failed KWEVORA's verification gate.",
-      "Search for DIFFERENT opportunities.",
-      "Broaden into adjacent niches, creator tools, software, subscriptions, services, ecommerce support, education, productivity, AI tools, and other legitimate offers.",
-      "Do not simply return the same brands again.",
-    ].join(" ");
+      "The first resellable-product candidates failed KWEVORA's verification gate.",
+      "Search for DIFFERENT products and different demand pockets.",
+      "Broaden across practical digital categories such as templates, guides, business resources, creator resources, productivity tools, educational resources, planners, marketing resources, design assets, and other legitimate digital products with explicit resale rights.",
+      "Do not simply return the same products or sellers again.",
+      persistentDirective,
+    ]
+      .filter(Boolean)
+      .join(" ");
   }
 
   return [
-    "Previous external opportunities failed verification.",
-    "Broaden the revenue search substantially.",
-    "Consider affiliate marketing, owned digital products, templates, guides, small paid resources, productized services, lead-generation offers, and other low-cost legitimate online revenue models.",
-    "Prefer an owned opportunity when dependence on third-party affiliate approval is preventing action.",
-    "The objective is a realistic path to revenue, not merely finding an affiliate link.",
-  ].join(" ");
+    "Previous resellable digital products failed verification.",
+    "Broaden substantially across legitimate MRR, PLR-with-resale-rights, Resell Rights, and other explicit commercial resale licenses.",
+    "Favor products whose exact license can be inspected and verified.",
+    "Prioritize real buyer demand, product quality, simple delivery, sensible pricing, manageable competition, and strong faceless marketing potential.",
+    "Do not switch to affiliate marketing or require creating a large original product from scratch.",
+    persistentDirective,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function buildResearchNotes({
@@ -436,13 +743,14 @@ function buildResearchNotes({
   strategy: string;
   rejected: string[];
   attempt: number;
-}) {
+}): string {
   const rejectedText =
     rejected.length > 0
       ? rejected
-          .slice(-20)
+          .slice(-25)
           .map(
-            (item) => `- ${item}`
+            (item: string) =>
+              `- ${item}`
           )
           .join("\n")
       : "None yet.";
@@ -450,14 +758,16 @@ function buildResearchNotes({
   return [
     originalNotes,
     "",
-    `KWEVORA AUTONOMOUS MONEY HUNT — ATTEMPT ${attempt}`,
+    `KWEVORA AUTONOMOUS RESELLABLE DIGITAL PRODUCT HUNT — ATTEMPT ${attempt}`,
     strategy,
     "",
-    "IMPORTANT:",
-    "Do not lower verification standards just to produce a winner.",
-    "Do not knowingly repeat rejected opportunities unless there is genuinely new evidence that materially changes their viability.",
+    "HARD RULES:",
+    "Do not lower verification standards merely to produce a winner.",
+    "Do not treat PLR, MRR, RR, commercial use, and affiliate rights as interchangeable.",
+    "Do not knowingly repeat rejected products unless genuinely new evidence materially changes their viability.",
+    "No explicit legal right to resell the exact product to end customers means the product cannot pass.",
     "",
-    "PREVIOUSLY REJECTED OR FAILED CANDIDATES:",
+    "PREVIOUSLY REJECTED OR FAILED PRODUCTS:",
     rejectedText,
   ]
     .filter(Boolean)
@@ -466,45 +776,37 @@ function buildResearchNotes({
 
 function collectRejectedCandidates(
   candidates: any[]
-) {
+): string[] {
   return candidates
     .filter(
       (candidate: any) =>
-        candidate
-          ?.readyForTesting !==
+        candidate?.readyForTesting !==
         true
     )
     .map(
       (candidate: any) =>
-        candidateIdentity(
-          candidate
-        )
+        candidateIdentity(candidate)
     )
     .filter(Boolean);
 }
 
 function collectUnresolvedFacts(
   candidates: any[]
-) {
+): string[] {
   return candidates
-    .flatMap(
-      (candidate: any) => {
-        const identity =
-          candidateIdentity(
-            candidate
-          ) ||
-          "Unknown candidate";
+    .flatMap((candidate: any) => {
+      const identity =
+        candidateIdentity(candidate) ||
+        "Unknown product";
 
-        return cleanStringArray(
-          candidate
-            ?.unresolvedFacts,
-          20
-        ).map(
-          (fact) =>
-            `${identity}: ${fact}`
-        );
-      }
-    )
+      return cleanStringArray(
+        candidate?.unresolvedFacts,
+        25
+      ).map(
+        (fact: string) =>
+          `${identity}: ${fact}`
+      );
+    })
     .filter(Boolean);
 }
 
@@ -521,32 +823,26 @@ async function researchMarket({
   goal: string;
   notes: string;
 }) {
-  const response =
-    await fetch(
-      `${baseUrl}/api/kai/opportunities/research`,
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-
-        body: JSON.stringify({
-          niche,
-          audience,
-          goal,
-          notes,
-        }),
-
-        cache: "no-store",
-      }
-    );
+  const response = await fetch(
+    `${baseUrl}/api/kai/opportunities/research`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+      body: JSON.stringify({
+        niche,
+        audience,
+        goal,
+        notes,
+      }),
+      cache: "no-store",
+    }
+  );
 
   const data =
-    await readJsonSafely(
-      response
-    );
+    await readJsonSafely(response);
 
   if (
     !response.ok ||
@@ -554,14 +850,12 @@ async function researchMarket({
   ) {
     throw new Error(
       data?.message ||
-        "KAI could not complete live market research."
+        "KAI could not complete live resellable digital product research."
     );
   }
 
   const research =
-    cleanString(
-      data?.research
-    );
+    cleanString(data?.research);
 
   if (!research) {
     throw new Error(
@@ -590,33 +884,27 @@ async function scoreOpportunities({
   notes: string;
   research: string;
 }) {
-  const response =
-    await fetch(
-      `${baseUrl}/api/kai/opportunities`,
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-
-        body: JSON.stringify({
-          niche,
-          audience,
-          goal,
-          notes,
-          research,
-        }),
-
-        cache: "no-store",
-      }
-    );
+  const response = await fetch(
+    `${baseUrl}/api/kai/opportunities`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+      body: JSON.stringify({
+        niche,
+        audience,
+        goal,
+        notes,
+        research,
+      }),
+      cache: "no-store",
+    }
+  );
 
   const data =
-    await readJsonSafely(
-      response
-    );
+    await readJsonSafely(response);
 
   if (
     !response.ok ||
@@ -624,7 +912,7 @@ async function scoreOpportunities({
   ) {
     throw new Error(
       data?.message ||
-        "KAI researched the market but could not evaluate the opportunities."
+        "KAI researched the market but could not evaluate the resellable digital products."
     );
   }
 
@@ -644,35 +932,29 @@ async function verifyCandidates({
   focus,
 }: {
   baseUrl: string;
-  candidates: any[];
+  candidates: VerificationCandidateInput[];
   verificationRound: number;
   focus: string;
 }) {
-  const response =
-    await fetch(
-      `${baseUrl}/api/kai/opportunities/verify`,
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-
-        body: JSON.stringify({
-          candidates,
-          verificationRound,
-          focus,
-        }),
-
-        cache: "no-store",
-      }
-    );
+  const response = await fetch(
+    `${baseUrl}/api/kai/opportunities/verify`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+      body: JSON.stringify({
+        candidates,
+        verificationRound,
+        focus,
+      }),
+      cache: "no-store",
+    }
+  );
 
   const data =
-    await readJsonSafely(
-      response
-    );
+    await readJsonSafely(response);
 
   if (
     !response.ok ||
@@ -680,7 +962,7 @@ async function verifyCandidates({
   ) {
     throw new Error(
       data?.message ||
-        `KAI could not complete verification round ${verificationRound}.`
+        `KAI could not complete resale verification round ${verificationRound}.`
     );
   }
 
@@ -688,6 +970,9 @@ async function verifyCandidates({
 }
 
 export async function GET() {
+  const persistentState =
+    await loadMoneyHuntState();
+
   return NextResponse.json({
     success: true,
 
@@ -695,33 +980,52 @@ export async function GET() {
       "KWEVORA_MONEY_MODE",
 
     capability:
-      "autonomous_opportunity_orchestrator_v3",
+      "persistent_autonomous_resellable_digital_product_orchestrator_v5",
+
+    businessModel:
+      "existing_resellable_digital_products",
 
     status: "ready",
+
+    persistentSearch: {
+      enabled: true,
+      cycleCount:
+        persistentState.cycleCount,
+      consecutiveCyclesWithoutWinner:
+        persistentState.consecutiveCyclesWithoutWinner,
+      lastCycleAt:
+        persistentState.lastCycleAt,
+      lastWinnerAt:
+        persistentState.lastWinnerAt,
+      lastWinner:
+        persistentState.lastWinner,
+      rememberedRejectedCandidates:
+        persistentState.rejectedCandidates.length,
+    },
 
     maxHuntAttempts:
       MAX_HUNT_ATTEMPTS,
 
     pipeline: [
-      "Live market research",
-      "Opportunity evaluation",
+      "Live buyer-demand research",
+      "Find existing digital products matching demand",
+      "Evaluate product quality and economics",
       "KWEVORA weighted scoring",
       "Finalist selection",
-      "Deep verification",
+      "Exact resale-license verification",
       "Unresolved-fact investigation",
-      "Hard action gate",
-      "Reject weak candidates",
+      "Hard resale-rights gate",
+      "Reject weak or unclear products",
       "Broaden the search",
-      "Try fresh opportunities",
-      "Expand beyond affiliate-only opportunities",
-      "Return verified revenue path or continuation state",
+      "Try fresh resellable products",
+      "Return verified product or continuation state",
     ],
 
     hardGate:
-      "KWEVORA never lowers verification standards merely to produce a winner.",
+      "No reliable evidence permitting resale of the exact product to end customers means KWEVORA cannot authorize a sales test.",
 
     mission:
-      "Keep searching intelligently for a realistic revenue opportunity while refusing to act on unverified assumptions.",
+      "Keep searching for existing, high-demand, legally resellable digital products while refusing to sell products with unclear rights, weak economics, poor quality, or insufficient demand.",
   });
 }
 
@@ -732,7 +1036,9 @@ export async function POST(
     const body =
       (await request
         .json()
-        .catch(() => ({}))) as MoneyModeRequest;
+        .catch(
+          () => ({})
+        )) as MoneyModeRequest;
 
     const niche =
       cleanString(body.niche);
@@ -742,7 +1048,7 @@ export async function POST(
 
     const goal =
       cleanString(body.goal) ||
-      "Find the strongest practical opportunity to generate digital or affiliate marketing income.";
+      "Find a strong existing digital product with current buyer demand that can legally be purchased or licensed and resold for profit.";
 
     const originalNotes =
       cleanString(body.notes);
@@ -750,11 +1056,29 @@ export async function POST(
     const baseUrl =
       getBaseUrl(request);
 
+    const persistentState =
+      await loadMoneyHuntState();
+
+    const persistentDirective =
+      buildPersistentSearchDirective(
+        persistentState
+      );
+
     const rejected =
       new Set<string>();
 
     const rejectedDisplay =
       new Set<string>();
+
+    for (
+      const item of persistentState.rejectedCandidates
+    ) {
+      rejected.add(
+        normalizeIdentity(item)
+      );
+
+      rejectedDisplay.add(item);
+    }
 
     for (
       const item of cleanStringArray(
@@ -807,9 +1131,7 @@ export async function POST(
       const strategy =
         buildAttemptStrategy(
           attempt,
-          Array.from(
-            rejectedDisplay
-          )
+          persistentDirective
         );
 
       const attemptNotes =
@@ -824,26 +1146,26 @@ export async function POST(
         });
 
       /*
-       * RESEARCH
+       * STEP 1
+       * LIVE DEMAND + PRODUCT RESEARCH
        */
       const {
         data: researchData,
         research,
-      } =
-        await researchMarket({
-          baseUrl,
-          niche,
-          audience,
-          goal,
-          notes:
-            attemptNotes,
-        });
+      } = await researchMarket({
+        baseUrl,
+        niche,
+        audience,
+        goal,
+        notes: attemptNotes,
+      });
 
       finalResearchData =
         researchData;
 
       /*
-       * SCORE
+       * STEP 2
+       * SCORE RESELLABLE PRODUCTS
        */
       const report =
         await scoreOpportunities({
@@ -851,13 +1173,11 @@ export async function POST(
           niche,
           audience,
           goal,
-          notes:
-            attemptNotes,
+          notes: attemptNotes,
           research,
         });
 
-      finalReport =
-        report;
+      finalReport = report;
 
       const allOpportunities:
         Opportunity[] =
@@ -867,14 +1187,11 @@ export async function POST(
           ? report.opportunities
           : [];
 
-      /*
-       * Remove candidates already rejected
-       * during this run or supplied by the
-       * future overnight runner.
-       */
       const freshOpportunities =
         allOpportunities.filter(
-          (opportunity) =>
+          (
+            opportunity: Opportunity
+          ) =>
             !isPreviouslyRejected(
               opportunity,
               rejected
@@ -908,17 +1225,16 @@ export async function POST(
         );
 
       /*
+       * STEP 3
        * VERIFICATION ROUND 1
        */
       const verification1 =
         await verifyCandidates({
           baseUrl,
-          candidates:
-            finalists,
-          verificationRound:
-            1,
+          candidates: finalists,
+          verificationRound: 1,
           focus:
-            "Verify the full current money path for each finalist. KWEVORA needs enough reliable evidence to decide whether a real small marketing test may begin.",
+            "Verify the exact product, legitimate seller/source, exact resale license, explicit right to resell to end customers, acquisition cost, pricing restrictions, current demand, product quality, saturation, restrictions, and faceless marketing viability. Do not authorize anything with unclear resale rights.",
         });
 
       totalVerificationRounds +=
@@ -928,11 +1244,9 @@ export async function POST(
 
       const candidates1 =
         Array.isArray(
-          verification1
-            ?.candidates
+          verification1?.candidates
         )
-          ? verification1
-              .candidates
+          ? verification1.candidates
           : [];
 
       let attemptVerification =
@@ -954,9 +1268,10 @@ export async function POST(
         );
 
       /*
+       * STEP 4
        * VERIFICATION ROUND 2
        *
-       * Chase exact unresolved facts.
+       * Chase the exact missing facts.
        */
       if (!attemptWinner) {
         const recheckCandidates =
@@ -974,17 +1289,15 @@ export async function POST(
               baseUrl,
               candidates:
                 recheckCandidates,
-              verificationRound:
-                2,
+              verificationRound: 2,
               focus:
-                "Resolve the exact unresolved facts from round 1. Search specifically for current affiliate availability, commission terms, cookie duration, payout details, approval requirements, traffic requirements, geographic eligibility, marketing restrictions, promotional asset rules, and any other fact preventing KWEVORA from safely authorizing a test. Do not guess.",
+                "Resolve the exact unresolved facts from round 1. Search specifically for the exact license governing this product, end-customer resale permission, rebranding and modification rights, transferability of resale rights, acquisition cost, recurring fees, minimum-price rules, marketplace restrictions, advertising restrictions, bundling and giveaway rules, demand evidence, product quality/freshness, saturation, margin evidence, and promotional-asset permissions. Do not guess. If the exact right to resell remains unclear, keep the product blocked.",
             });
 
           totalVerificationRounds +=
             1;
 
-          verificationRounds =
-            2;
+          verificationRounds = 2;
 
           attemptVerification =
             verification2;
@@ -1038,14 +1351,19 @@ export async function POST(
           strategy,
           opportunityCount:
             freshOpportunities.length,
+
           finalists:
             finalists
-              .map((candidate) =>
-                candidateIdentity(
-                  candidate
-                )
+              .map(
+                (
+                  candidate:
+                    VerificationCandidateInput
+                ) =>
+                  candidate.productName ||
+                  candidate.seller
               )
               .filter(Boolean),
+
           verificationRounds,
           result: "verified",
           rejected:
@@ -1056,22 +1374,18 @@ export async function POST(
       }
 
       /*
-       * FAIL THIS SET.
-       *
-       * Remember the failures and move on.
+       * THIS BATCH FAILED.
+       * Remember it and keep searching.
        */
       for (
-        const identity of rejectedThisAttempt
+        const identity of
+        rejectedThisAttempt
       ) {
         rejected.add(
-          normalizeIdentity(
-            identity
-          )
+          normalizeIdentity(identity)
         );
 
-        rejectedDisplay.add(
-          identity
-        );
+        rejectedDisplay.add(identity);
       }
 
       huntHistory.push({
@@ -1079,14 +1393,19 @@ export async function POST(
         strategy,
         opportunityCount:
           freshOpportunities.length,
+
         finalists:
           finalists
-            .map((candidate) =>
-              candidateIdentity(
-                candidate
-              )
+            .map(
+              (
+                candidate:
+                  VerificationCandidateInput
+              ) =>
+                candidate.productName ||
+                candidate.seller
             )
             .filter(Boolean),
+
         verificationRounds,
         result: "blocked",
         rejected:
@@ -1095,7 +1414,11 @@ export async function POST(
     }
 
     /*
-     * HARD ACTION GATE
+     * FINAL HARD GATE
+     *
+     * The verifier already contains a
+     * code-level license gate. We check
+     * again here before authorizing action.
      */
     const readyToAct =
       verifiedWinner
@@ -1103,7 +1426,14 @@ export async function POST(
         true &&
       verifiedWinner
         ?.verificationStatus ===
-        "verified";
+        "verified" &&
+      verifiedWinner
+        ?.license?.verified ===
+        true &&
+      verifiedWinner
+        ?.license
+        ?.resaleToEndCustomers ===
+        true;
 
     const unresolvedFacts =
       readyToAct
@@ -1118,19 +1448,86 @@ export async function POST(
             verifiedWinner
               ?.nextAction
           ) ||
-          "Begin the approved small money test."
-        : "KAI has not authorized a campaign yet. Preserve these rejected candidates and continue the Money Hunt with fresh opportunities during the next autonomous cycle.";
+          "Prepare the approved digital product for a small sales test."
+        : "KAI has not authorized a product yet. Preserve these rejected products and continue searching for fresh, high-demand digital products with clearer resale rights during the next autonomous cycle.";
 
     const pipelineStatus =
       readyToAct
-        ? "verified_opportunity_ready"
+        ? "verified_resellable_product_ready"
         : "continue_autonomous_search";
+
+    const cycleCompletedAt =
+      new Date().toISOString();
+
+    const winnerIdentity =
+      readyToAct
+        ? candidateIdentity(
+            verifiedWinner
+          )
+        : "";
+
+    const nextPersistentState:
+      PersistentMoneyHuntState = {
+        version:
+          MONEY_HUNT_STATE_VERSION,
+
+        cycleCount:
+          persistentState.cycleCount + 1,
+
+        consecutiveCyclesWithoutWinner:
+          readyToAct
+            ? 0
+            : persistentState
+                .consecutiveCyclesWithoutWinner + 1,
+
+        lastCycleAt:
+          cycleCompletedAt,
+
+        lastWinnerAt:
+          readyToAct
+            ? cycleCompletedAt
+            : persistentState.lastWinnerAt,
+
+        lastWinner:
+          readyToAct
+            ? winnerIdentity ||
+              cleanString(
+                verifiedWinner?.productName
+              ) ||
+              cleanString(
+                verifiedWinner?.brand
+              )
+            : persistentState.lastWinner,
+
+        rejectedCandidates:
+          Array.from(
+            rejectedDisplay
+          ).slice(-500),
+
+        recentStrategies: [
+          ...persistentState.recentStrategies,
+          persistentDirective,
+          ...huntHistory.map(
+            (item: HuntAttempt) =>
+              item.strategy
+          ),
+        ]
+          .filter(Boolean)
+          .slice(-25),
+      };
+
+    await saveMoneyHuntState(
+      nextPersistentState
+    );
 
     return NextResponse.json({
       success: true,
 
       mode:
         "KWEVORA_MONEY_MODE",
+
+      businessModel:
+        "existing_resellable_digital_products",
 
       runAt:
         new Date().toISOString(),
@@ -1139,6 +1536,25 @@ export async function POST(
 
       autonomousSearch: {
         enabled: true,
+
+        persistent: true,
+
+        cycleCount:
+          nextPersistentState.cycleCount,
+
+        consecutiveCyclesWithoutWinner:
+          nextPersistentState
+            .consecutiveCyclesWithoutWinner,
+
+        lastCycleAt:
+          nextPersistentState.lastCycleAt,
+
+        rememberedRejectedCandidates:
+          nextPersistentState
+            .rejectedCandidates.length,
+
+        searchDirective:
+          persistentDirective,
 
         maxAttemptsThisRun:
           MAX_HUNT_ATTEMPTS,
@@ -1153,8 +1569,8 @@ export async function POST(
 
         nextCycle:
           readyToAct
-            ? "campaign_preparation"
-            : "search_fresh_opportunities",
+            ? "store_and_campaign_preparation"
+            : "search_fresh_resellable_products",
 
         rejectedCandidates:
           Array.from(
@@ -1169,8 +1585,7 @@ export async function POST(
         totalVerificationRounds,
 
       businessGoal:
-        finalReport
-          ?.businessGoal ??
+        finalReport?.businessGoal ??
         goal,
 
       recommendation: {
@@ -1197,8 +1612,8 @@ export async function POST(
                   ?.recommendation
                   ?.reason
               ) ||
-              "KWEVORA found and verified a practical revenue opportunity."
-            : "KWEVORA exhausted this autonomous hunt without finding a candidate strong enough to pass the hard gate. The next autonomous cycle should continue with fresh opportunities rather than lowering standards.",
+              "KWEVORA found a digital product with sufficient demand and verified resale rights for a small test."
+            : "KWEVORA exhausted this autonomous hunt without finding a digital product strong enough to pass the resale-rights hard gate. The next autonomous cycle should continue with fresh products rather than lowering standards.",
 
         verificationStatus:
           readyToAct
@@ -1304,6 +1719,110 @@ export async function POST(
         },
       },
 
+      productPlan:
+        readyToAct
+          ? {
+              source:
+                verifiedWinner?.source ??
+                null,
+
+              license:
+                verifiedWinner?.license ??
+                null,
+
+              acquisition:
+                verifiedWinner
+                  ?.acquisition ??
+                null,
+
+              resale:
+                verifiedWinner?.resale ??
+                null,
+
+              margin:
+                verifiedWinner?.margin ??
+                null,
+
+              demand:
+                verifiedWinner?.demand ??
+                null,
+
+              quality:
+                verifiedWinner?.quality ??
+                null,
+
+              competition:
+                verifiedWinner
+                  ?.competition ??
+                null,
+
+              facelessMarketing:
+                verifiedWinner
+                  ?.facelessMarketing ??
+                null,
+
+              stanStorePlan:
+                finalOpportunities.find(
+                  (
+                    opportunity:
+                      Opportunity
+                  ) =>
+                    normalizeIdentity(
+                      cleanString(
+                        opportunity.productName
+                      )
+                    ) ===
+                    normalizeIdentity(
+                      cleanString(
+                        verifiedWinner
+                          ?.productName
+                      )
+                    )
+                )?.stanStorePlan ??
+                null,
+
+              marketingPlan:
+                finalOpportunities.find(
+                  (
+                    opportunity:
+                      Opportunity
+                  ) =>
+                    normalizeIdentity(
+                      cleanString(
+                        opportunity.productName
+                      )
+                    ) ===
+                    normalizeIdentity(
+                      cleanString(
+                        verifiedWinner
+                          ?.productName
+                      )
+                    )
+                )?.marketingPlan ??
+                null,
+
+              firstMoneyTest:
+                finalOpportunities.find(
+                  (
+                    opportunity:
+                      Opportunity
+                  ) =>
+                    normalizeIdentity(
+                      cleanString(
+                        opportunity.productName
+                      )
+                    ) ===
+                    normalizeIdentity(
+                      cleanString(
+                        verifiedWinner
+                          ?.productName
+                      )
+                    )
+                )?.firstMoneyTest ??
+                null,
+            }
+          : null,
+
       researchSummary:
         finalReport
           ?.researchSummary ??
@@ -1317,7 +1836,7 @@ export async function POST(
     });
   } catch (error) {
     console.error(
-      "KWEVORA autonomous Money Mode v3 run failed:",
+      "KWEVORA persistent autonomous resellable digital product Money Mode v5 failed:",
       error
     );
 
@@ -1328,12 +1847,14 @@ export async function POST(
         mode:
           "KWEVORA_MONEY_MODE",
 
+        businessModel:
+          "existing_resellable_digital_products",
+
         message:
           error instanceof Error
             ? error.message
-            : "KAI could not complete the autonomous Money Hunt.",
+            : "KAI could not complete the autonomous resellable digital product hunt.",
       },
-
       {
         status: 500,
       }

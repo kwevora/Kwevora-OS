@@ -1,0 +1,31 @@
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+const supabaseSecretKey =
+  process.env.SUPABASE_SECRET_KEY;
+
+if (!supabaseUrl) {
+  throw new Error(
+    "NEXT_PUBLIC_SUPABASE_URL is missing from the KWEVORA environment.",
+  );
+}
+
+if (!supabaseSecretKey) {
+  throw new Error(
+    "SUPABASE_SECRET_KEY is missing from the KWEVORA environment.",
+  );
+}
+
+export const supabaseServer =
+  createClient(
+    supabaseUrl,
+    supabaseSecretKey,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    },
+  );

@@ -1,0 +1,10 @@
+{
+  "success": false,
+  "completedAt": "2026-08-11T21:13:14.306Z",
+  "pipelineStatus": "money_hunt_failed",
+  "readyToAct": false,
+  "bestOpportunity": "",
+  "result": {
+    "message": "fetch failed"
+  }
+}

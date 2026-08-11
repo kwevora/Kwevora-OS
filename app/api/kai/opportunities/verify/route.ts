@@ -11,6 +11,12 @@ type CandidateInput = {
   affiliateProgramUrl?: string;
   whatItIs?: string;
   unresolvedFacts?: string[];
+  sourceUrl?: string;
+  seller?: string;
+  licenseType?: string;
+  licenseUrl?: string;
+  acquisitionCost?: string;
+  resalePrice?: string;
 };
 
 type VerifyRequest = {
@@ -34,6 +40,100 @@ type VerifiedCandidate = {
     | "unverified"
     | "rejected";
 
+  source: {
+    verified: boolean;
+    seller: string;
+    productUrl: string;
+    sourceReputation: string;
+  };
+
+  license: {
+    verified: boolean;
+    licenseType: string;
+    licenseUrl: string;
+    resaleToEndCustomers: boolean;
+    rebrandingAllowed: boolean;
+    modificationAllowed: boolean;
+    transferableResaleRights: boolean;
+    details: string;
+  };
+
+  acquisition: {
+    verified: boolean;
+    cost: string;
+    recurringFees: string;
+  };
+
+  resale: {
+    verified: boolean;
+    permittedPrice: string;
+    minimumPrice: string;
+    suggestedPrice: string;
+  };
+
+  margin: {
+    verified: boolean;
+    details: string;
+    score: number;
+  };
+
+  demand: {
+    verified: boolean;
+    score: number;
+    evidence: string[];
+    details: string;
+  };
+
+  quality: {
+    verified: boolean;
+    score: number;
+    details: string;
+    freshnessConcerns: string;
+  };
+
+  competition: {
+    verified: boolean;
+    score: number;
+    saturationRisk: string;
+    details: string;
+  };
+
+  restrictions: string[];
+
+  requirements: {
+    verified: boolean;
+    marketplaceRestrictions: string[];
+    advertisingRestrictions: string[];
+    bundlingRestrictions: string[];
+    giveawayRestrictions: string[];
+    geographicRestrictions: string;
+
+    // Temporary compatibility with the existing Money Mode UI.
+    approvalRequirements: string[];
+    trafficRequirements: string;
+  };
+
+  pricing: {
+    verified: boolean;
+    details: string;
+  };
+
+  facelessMarketing: {
+    suitable: boolean;
+    score: number;
+    reason: string;
+    legalAssetNotes: string;
+    contentAngles: string[];
+  };
+
+  monetizationConfidence: number;
+  verifiedFacts: string[];
+  unresolvedFacts: string[];
+  warnings: string[];
+  readyForTesting: boolean;
+  nextAction: string;
+
+  // Temporary compatibility fields while the rest of Money Mode is converted.
   program: {
     exists: boolean;
     currentlyAvailable: boolean;
@@ -58,94 +158,49 @@ type VerifiedCandidate = {
     verified: boolean;
     details: string;
   };
-
-  requirements: {
-    verified: boolean;
-    approvalRequirements: string[];
-    trafficRequirements: string;
-    geographicRestrictions: string;
-  };
-
-  restrictions: string[];
-
-  pricing: {
-    verified: boolean;
-    details: string;
-  };
-
-  facelessMarketing: {
-    suitable: boolean;
-    score: number;
-    reason: string;
-    legalAssetNotes: string;
-    contentAngles: string[];
-  };
-
-  monetizationConfidence: number;
-
-  verifiedFacts: string[];
-  unresolvedFacts: string[];
-  warnings: string[];
-
-  readyForTesting: boolean;
-
-  nextAction: string;
 };
 
 type VerificationReport = {
   verifiedAt: string;
   verificationRound: number;
-
   mode: "KWEVORA_MONEY_MODE";
-
-  capability:
-    "DEEP_OPPORTUNITY_VERIFICATION";
-
+  capability: "RESELLABLE_DIGITAL_PRODUCT_VERIFICATION";
+  businessModel: "existing_resellable_digital_products";
   candidates: VerifiedCandidate[];
-
   strongestVerifiedCandidate: string;
-
   summary: string;
 };
 
 function cleanString(value: unknown): string {
-  return typeof value === "string"
-    ? value.trim()
-    : "";
+  return typeof value === "string" ? value.trim() : "";
 }
 
-function clampScore(value: unknown): number {
-  const number =
-    typeof value === "number"
-      ? value
-      : Number(value);
-
-  if (!Number.isFinite(number)) {
-    return 0;
-  }
-
-  return Math.max(
-    0,
-    Math.min(100, Math.round(number))
-  );
-}
-
-function cleanStringArray(
-  value: unknown,
-  max = 20
-): string[] {
+function cleanStringArray(value: unknown, max = 20): string[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
   return value
-    .filter(
-      (item): item is string =>
-        typeof item === "string"
-    )
-    .map((item) => item.trim())
+    .filter((item: unknown): item is string => typeof item === "string")
+    .map((item: string) => item.trim())
     .filter(Boolean)
     .slice(0, max);
+}
+
+function clampScore(value: unknown): number {
+  const number =
+    typeof value === "number" ? value : Number(value);
+
+  if (!Number.isFinite(number)) {
+    return 0;
+  }
+
+  // Normalize an occasional 0-10 score to 0-100.
+  if (number > 0 && number <= 10) {
+    return Math.max(0, Math.min(100, Math.round(number * 10)));
+  }
+
+  return Math.max(0, Math.min(100, Math.round(number)));
 }
 
 function cleanRound(value: unknown): number {
@@ -155,10 +210,7 @@ function cleanRound(value: unknown): number {
     return 1;
   }
 
-  return Math.max(
-    1,
-    Math.min(3, Math.round(number))
-  );
+  return Math.max(1, Math.min(3, Math.round(number)));
 }
 
 function extractOutputText(data: any): string {
@@ -193,11 +245,8 @@ function extractOutputText(data: any): string {
   return parts.join("\n\n").trim();
 }
 
-function extractSources(
-  data: any
-): VerificationSource[] {
-  const sources =
-    new Map<string, VerificationSource>();
+function extractSources(data: any): VerificationSource[] {
+  const sources = new Map<string, VerificationSource>();
 
   if (!Array.isArray(data?.output)) {
     return [];
@@ -209,18 +258,14 @@ function extractSources(
       Array.isArray(item?.action?.sources)
     ) {
       for (const source of item.action.sources) {
-        const url =
-          cleanString(source?.url);
+        const url = cleanString(source?.url);
 
         if (!url) {
           continue;
         }
 
         sources.set(url, {
-          title:
-            cleanString(source?.title) ||
-            url,
-
+          title: cleanString(source?.title) || url,
           url,
         });
       }
@@ -238,313 +283,327 @@ function extractSources(
       for (const annotation of content.annotations) {
         const url =
           cleanString(annotation?.url) ||
-          cleanString(
-            annotation
-              ?.url_citation
-              ?.url
-          );
+          cleanString(annotation?.url_citation?.url);
 
         if (!url) {
           continue;
         }
 
-        const title =
-          cleanString(annotation?.title) ||
-          cleanString(
-            annotation
-              ?.url_citation
-              ?.title
-          ) ||
-          url;
-
         sources.set(url, {
-          title,
+          title:
+            cleanString(annotation?.title) ||
+            cleanString(annotation?.url_citation?.title) ||
+            url,
           url,
         });
       }
     }
   }
 
-  return Array.from(
-    sources.values()
-  );
+  return Array.from(sources.values());
 }
 
-function normalizeCandidate(
-  value: any
-): VerifiedCandidate {
-  const program =
-    value?.program ?? {};
+function normalizeCandidate(value: any): VerifiedCandidate {
+  const source = value?.source ?? {};
+  const license = value?.license ?? {};
+  const acquisition = value?.acquisition ?? {};
+  const resale = value?.resale ?? {};
+  const margin = value?.margin ?? {};
+  const demand = value?.demand ?? {};
+  const quality = value?.quality ?? {};
+  const competition = value?.competition ?? {};
+  const requirements = value?.requirements ?? {};
+  const pricing = value?.pricing ?? {};
+  const facelessMarketing = value?.facelessMarketing ?? {};
 
-  const commission =
-    value?.commission ?? {};
-
-  const cookie =
-    value?.cookie ?? {};
-
-  const payout =
-    value?.payout ?? {};
-
-  const requirements =
-    value?.requirements ?? {};
-
-  const pricing =
-    value?.pricing ?? {};
-
-  const facelessMarketing =
-    value?.facelessMarketing ?? {};
-
-  const verificationStatus =
-    [
-      "verified",
-      "partially_verified",
-      "unverified",
-      "rejected",
-    ].includes(
+  let verificationStatus: VerifiedCandidate["verificationStatus"] =
+    ["verified", "partially_verified", "unverified", "rejected"].includes(
       value?.verificationStatus
     )
       ? value.verificationStatus
       : "unverified";
 
+  const unresolvedFacts = cleanStringArray(
+    value?.unresolvedFacts,
+    25
+  );
+
+  const sourceVerified = source?.verified === true;
+  const licenseVerified = license?.verified === true;
+  const resaleAllowed =
+    license?.resaleToEndCustomers === true;
+  const acquisitionVerified =
+    acquisition?.verified === true;
+  const pricingVerified =
+    pricing?.verified === true;
+  const demandVerified = demand?.verified === true;
+  const facelessSuitable =
+    facelessMarketing?.suitable === true;
+
+  const coreGatePassed =
+    sourceVerified &&
+    licenseVerified &&
+    resaleAllowed &&
+    acquisitionVerified &&
+    pricingVerified &&
+    demandVerified &&
+    facelessSuitable &&
+    unresolvedFacts.length === 0;
+
+  let readyForTesting =
+    value?.readyForTesting === true &&
+    coreGatePassed;
+
+  if (!licenseVerified || !resaleAllowed) {
+    readyForTesting = false;
+
+    if (verificationStatus === "verified") {
+      verificationStatus = "partially_verified";
+    }
+  }
+
+  if (readyForTesting) {
+    verificationStatus = "verified";
+  }
+
   return {
     productName:
-      cleanString(
-        value?.productName
-      ) ||
-      "Unknown opportunity",
+      cleanString(value?.productName) ||
+      "Unknown digital product",
 
     brand:
       cleanString(value?.brand) ||
+      cleanString(source?.seller) ||
       "Unknown",
 
     verificationStatus,
 
-    program: {
-      exists:
-        program?.exists === true,
-
-      currentlyAvailable:
-        program
-          ?.currentlyAvailable === true,
-
-      programName:
-        cleanString(
-          program?.programName
-        ),
-
-      signupUrl:
-        cleanString(
-          program?.signupUrl
-        ),
-
-      network:
-        cleanString(
-          program?.network
-        ),
+    source: {
+      verified: sourceVerified,
+      seller: cleanString(source?.seller),
+      productUrl: cleanString(source?.productUrl),
+      sourceReputation: cleanString(
+        source?.sourceReputation
+      ),
     },
 
-    commission: {
-      verified:
-        commission?.verified === true,
-
-      structure:
-        cleanString(
-          commission?.structure
-        ),
-
-      recurring:
-        commission?.recurring === true,
-
-      recurringDetails:
-        cleanString(
-          commission
-            ?.recurringDetails
-        ),
+    license: {
+      verified: licenseVerified,
+      licenseType: cleanString(license?.licenseType),
+      licenseUrl: cleanString(license?.licenseUrl),
+      resaleToEndCustomers: resaleAllowed,
+      rebrandingAllowed:
+        license?.rebrandingAllowed === true,
+      modificationAllowed:
+        license?.modificationAllowed === true,
+      transferableResaleRights:
+        license?.transferableResaleRights === true,
+      details: cleanString(license?.details),
     },
 
-    cookie: {
-      verified:
-        cookie?.verified === true,
-
-      duration:
-        cleanString(
-          cookie?.duration
-        ),
+    acquisition: {
+      verified: acquisitionVerified,
+      cost: cleanString(acquisition?.cost),
+      recurringFees: cleanString(
+        acquisition?.recurringFees
+      ),
     },
 
-    payout: {
-      verified:
-        payout?.verified === true,
-
-      details:
-        cleanString(
-          payout?.details
-        ),
+    resale: {
+      verified: resale?.verified === true,
+      permittedPrice: cleanString(
+        resale?.permittedPrice
+      ),
+      minimumPrice: cleanString(resale?.minimumPrice),
+      suggestedPrice: cleanString(
+        resale?.suggestedPrice
+      ),
     },
+
+    margin: {
+      verified: margin?.verified === true,
+      details: cleanString(margin?.details),
+      score: clampScore(margin?.score),
+    },
+
+    demand: {
+      verified: demandVerified,
+      score: clampScore(demand?.score),
+      evidence: cleanStringArray(demand?.evidence, 15),
+      details: cleanString(demand?.details),
+    },
+
+    quality: {
+      verified: quality?.verified === true,
+      score: clampScore(quality?.score),
+      details: cleanString(quality?.details),
+      freshnessConcerns: cleanString(
+        quality?.freshnessConcerns
+      ),
+    },
+
+    competition: {
+      verified: competition?.verified === true,
+      score: clampScore(competition?.score),
+      saturationRisk: cleanString(
+        competition?.saturationRisk
+      ),
+      details: cleanString(competition?.details),
+    },
+
+    restrictions: cleanStringArray(
+      value?.restrictions,
+      20
+    ),
 
     requirements: {
-      verified:
-        requirements
-          ?.verified === true,
-
-      approvalRequirements:
-        cleanStringArray(
-          requirements
-            ?.approvalRequirements,
-          12
-        ),
-
-      trafficRequirements:
-        cleanString(
-          requirements
-            ?.trafficRequirements
-        ),
-
-      geographicRestrictions:
-        cleanString(
-          requirements
-            ?.geographicRestrictions
-        ),
+      verified: requirements?.verified === true,
+      marketplaceRestrictions: cleanStringArray(
+        requirements?.marketplaceRestrictions,
+        12
+      ),
+      advertisingRestrictions: cleanStringArray(
+        requirements?.advertisingRestrictions,
+        12
+      ),
+      bundlingRestrictions: cleanStringArray(
+        requirements?.bundlingRestrictions,
+        12
+      ),
+      giveawayRestrictions: cleanStringArray(
+        requirements?.giveawayRestrictions,
+        12
+      ),
+      geographicRestrictions: cleanString(
+        requirements?.geographicRestrictions
+      ),
+      approvalRequirements: [],
+      trafficRequirements: "",
     },
 
-    restrictions:
-      cleanStringArray(
-        value?.restrictions,
-        15
-      ),
-
     pricing: {
-      verified:
-        pricing?.verified === true,
-
-      details:
-        cleanString(
-          pricing?.details
-        ),
+      verified: pricingVerified,
+      details: cleanString(pricing?.details),
     },
 
     facelessMarketing: {
-      suitable:
-        facelessMarketing
-          ?.suitable === true,
-
-      score:
-        clampScore(
-          facelessMarketing?.score
-        ),
-
-      reason:
-        cleanString(
-          facelessMarketing?.reason
-        ),
-
-      legalAssetNotes:
-        cleanString(
-          facelessMarketing
-            ?.legalAssetNotes
-        ),
-
-      contentAngles:
-        cleanStringArray(
-          facelessMarketing
-            ?.contentAngles,
-          10
-        ),
+      suitable: facelessSuitable,
+      score: clampScore(facelessMarketing?.score),
+      reason: cleanString(facelessMarketing?.reason),
+      legalAssetNotes: cleanString(
+        facelessMarketing?.legalAssetNotes
+      ),
+      contentAngles: cleanStringArray(
+        facelessMarketing?.contentAngles,
+        10
+      ),
     },
 
-    monetizationConfidence:
-      clampScore(
-        value
-          ?.monetizationConfidence
-      ),
+    monetizationConfidence: clampScore(
+      value?.monetizationConfidence
+    ),
 
-    verifiedFacts:
-      cleanStringArray(
-        value?.verifiedFacts,
-        20
-      ),
+    verifiedFacts: cleanStringArray(
+      value?.verifiedFacts,
+      25
+    ),
 
-    unresolvedFacts:
-      cleanStringArray(
-        value?.unresolvedFacts,
-        20
-      ),
+    unresolvedFacts,
 
-    warnings:
-      cleanStringArray(
-        value?.warnings,
-        15
-      ),
+    warnings: cleanStringArray(value?.warnings, 20),
 
-    readyForTesting:
-      value?.readyForTesting ===
-      true,
+    readyForTesting,
 
-    nextAction:
-      cleanString(
-        value?.nextAction
+    nextAction: readyForTesting
+      ? cleanString(value?.nextAction) ||
+        "Prepare the first small digital-product marketing test."
+      : "Do not sell or market this product yet. Resolve the remaining licensing, demand, pricing, source, or product-quality questions first.",
+
+    // Temporary compatibility fields.
+    program: {
+      exists: sourceVerified,
+      currentlyAvailable:
+        sourceVerified && acquisitionVerified,
+      programName: cleanString(source?.seller),
+      signupUrl: cleanString(source?.productUrl),
+      network: cleanString(license?.licenseType),
+    },
+
+    commission: {
+      verified: margin?.verified === true,
+      structure: cleanString(margin?.details),
+      recurring: false,
+      recurringDetails: cleanString(
+        acquisition?.recurringFees
       ),
+    },
+
+    cookie: {
+      verified: licenseVerified,
+      duration: cleanString(license?.details),
+    },
+
+    payout: {
+      verified: pricingVerified,
+      details: cleanString(pricing?.details),
+    },
   };
 }
 
 function buildCandidateText(
   candidates: CandidateInput[]
-) {
+): string {
   return candidates
-    .map(
-      (candidate, index) => {
-        const unresolved =
-          cleanStringArray(
-            candidate.unresolvedFacts,
-            20
-          );
+    .map((candidate: CandidateInput, index: number) => {
+      const unresolved = cleanStringArray(
+        candidate.unresolvedFacts,
+        20
+      );
 
-        return [
-          `CANDIDATE ${index + 1}`,
-          `Product: ${
-            cleanString(
-              candidate.productName
-            ) || "Unknown"
-          }`,
-          `Brand: ${
-            cleanString(
-              candidate.brand
-            ) || "Unknown"
-          }`,
-          `Opportunity type: ${
-            cleanString(
-              candidate.opportunityType
-            ) || "Unknown"
-          }`,
-          `Known affiliate program: ${
-            cleanString(
-              candidate
-                .affiliateProgramName
-            ) || "Unknown"
-          }`,
-          `Known program URL: ${
-            cleanString(
-              candidate
-                .affiliateProgramUrl
-            ) || "Unknown"
-          }`,
-          `Description: ${
-            cleanString(
-              candidate.whatItIs
-            ) || "None"
-          }`,
-          "",
-          "FACTS STILL NEEDING VERIFICATION:",
-          unresolved.length > 0
-            ? unresolved
-                .map(
-                  (fact) => `- ${fact}`
-                )
-                .join("\n")
-            : "- No prior unresolved facts supplied.",
-        ].join("\n");
-      }
-    )
+      return [
+        `CANDIDATE ${index + 1}`,
+        `Product: ${
+          cleanString(candidate.productName) || "Unknown"
+        }`,
+        `Seller / Brand: ${
+          cleanString(candidate.seller) ||
+          cleanString(candidate.brand) ||
+          "Unknown"
+        }`,
+        `Opportunity type: ${
+          cleanString(candidate.opportunityType) ||
+          "Existing resellable digital product"
+        }`,
+        `Known product/source URL: ${
+          cleanString(candidate.sourceUrl) ||
+          cleanString(candidate.affiliateProgramUrl) ||
+          "Unknown"
+        }`,
+        `Known license type: ${
+          cleanString(candidate.licenseType) || "Unknown"
+        }`,
+        `Known license URL: ${
+          cleanString(candidate.licenseUrl) || "Unknown"
+        }`,
+        `Known acquisition cost: ${
+          cleanString(candidate.acquisitionCost) ||
+          "Unknown"
+        }`,
+        `Known resale price: ${
+          cleanString(candidate.resalePrice) || "Unknown"
+        }`,
+        `Description: ${
+          cleanString(candidate.whatItIs) || "None"
+        }`,
+        "",
+        "FACTS STILL NEEDING VERIFICATION:",
+        unresolved.length > 0
+          ? unresolved
+              .map((fact: string) => `- ${fact}`)
+              .join("\n")
+          : "- No prior unresolved facts supplied.",
+      ].join("\n");
+    })
     .join("\n\n");
 }
 
@@ -559,537 +618,589 @@ async function deeplyVerify({
   verificationRound: number;
   focus: string;
 }) {
-  const today =
-    new Date()
-      .toISOString()
-      .slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+  const candidateText = buildCandidateText(candidates);
 
-  const candidateText =
-    buildCandidateText(
-      candidates
-    );
+  const response = await fetch(
+    "https://api.openai.com/v1/responses",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model:
+          process.env.KAI_RESEARCH_MODEL ||
+          process.env.KAI_TEXT_MODEL ||
+          "gpt-5-mini",
 
-  const response =
-    await fetch(
-      "https://api.openai.com/v1/responses",
-      {
-        method: "POST",
+        tools: [
+          {
+            type: "web_search",
+            search_context_size: "high",
+          },
+        ],
 
-        headers: {
-          Authorization:
-            `Bearer ${apiKey}`,
+        tool_choice: "auto",
 
-          "Content-Type":
-            "application/json",
-        },
+        instructions: [
+          "You are KAI, the operating intelligence inside KWEVORA OS.",
+          "Always spell the brand exactly KWEVORA.",
+          "You are operating in KWEVORA MONEY MODE.",
+          "",
+          "You are performing DEEP RESELLABLE DIGITAL PRODUCT VERIFICATION.",
+          `Verification round: ${verificationRound}.`,
+          `Today is ${today}.`,
+          "",
+          "BUSINESS MODEL:",
+          "The user wants to sell existing digital products created by other people or companies when the user has clear legal rights to resell those products for the user's own profit.",
+          "This is not primarily affiliate marketing.",
+          "This is not primarily creating original products from scratch.",
+          "",
+          "ABSOLUTE HARD GATE:",
+          "If reliable evidence does not establish that the user may legally resell the exact product to end customers, readyForTesting MUST be false.",
+          "",
+          "PLR, MRR, RR, commercial use, personal use, and affiliate rights are NOT interchangeable.",
+          "Read the actual licensing terms whenever possible.",
+          "Do not assume that buying or downloading a product grants resale rights.",
+          "",
+          "USE LIVE WEB SEARCH.",
+          "Do not rely on model memory for current licensing, pricing, availability, or restrictions.",
+          "",
+          "SOURCE PRIORITY:",
+          "1. Exact product sales page and exact license.",
+          "2. Official seller/provider license, terms, FAQ, help, or legal pages.",
+          "3. Legitimate marketplace page hosting the exact product.",
+          "4. Reputable independent sources for demand, quality, reputation, and competition.",
+          "",
+          "VERIFY FOR EACH CANDIDATE:",
+          "- exact product and seller",
+          "- legitimate source",
+          "- current product availability",
+          "- exact license type",
+          "- resale to end customers",
+          "- rebranding rights",
+          "- modification rights",
+          "- transferable resale rights",
+          "- acquisition/license cost",
+          "- recurring costs",
+          "- resale-price restrictions",
+          "- marketplace restrictions",
+          "- advertising restrictions",
+          "- bundling restrictions",
+          "- giveaway restrictions",
+          "- geographic restrictions",
+          "- current demand",
+          "- product quality and freshness",
+          "- competition and saturation",
+          "- margin evidence",
+          "- faceless marketing suitability",
+          "- promotional asset restrictions",
+          "",
+          "If the license is missing, vague, contradictory, or cannot be tied to the exact product, leave resale rights unresolved.",
+          "Reject pirated, stolen, counterfeit, deceptive, or unauthorized products.",
+          "Do not promise profit.",
+          "Do not claim exact sales volume unless reliable evidence supports it.",
+          "",
+          "READY FOR TESTING requires:",
+          "- legitimate source",
+          "- explicit end-customer resale rights",
+          "- understood acquisition cost",
+          "- understood pricing/resale restrictions",
+          "- meaningful demand evidence",
+          "- no unresolved licensing issue",
+          "- no restriction that makes the planned sale impractical",
+          "- reasonable original faceless marketing path",
+          "",
+          "verificationStatus meanings:",
+          "verified = enough core evidence exists to authorize a small test.",
+          "partially_verified = promising but important facts remain unresolved.",
+          "unverified = reliable evidence is insufficient.",
+          "rejected = KWEVORA should not pursue this exact product.",
+          "",
+          "When prior unresolved facts are supplied, actively search for those exact facts.",
+          "If sources conflict, report the conflict and leave the fact unresolved.",
+          "Do not lower standards merely because the product looks popular.",
+          "Return only the required JSON.",
+        ].join("\n"),
 
-        body: JSON.stringify({
-          model:
-            process.env
-              .KAI_RESEARCH_MODEL ||
-            process.env
-              .KAI_TEXT_MODEL ||
-            "gpt-5-mini",
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: [
+                  "KWEVORA MONEY MODE — RESELLABLE DIGITAL PRODUCT VERIFICATION",
+                  "",
+                  candidateText,
+                  "",
+                  `SPECIAL VERIFICATION FOCUS: ${
+                    focus ||
+                    "Resolve every material fact needed to determine whether KWEVORA can legally and practically resell the exact product."
+                  }`,
+                  "",
+                  "Verify the right to resell first.",
+                ].join("\n"),
+              },
+            ],
+          },
+        ],
 
-          tools: [
-            {
-              type: "web_search",
-              search_context_size:
-                "high",
-            },
-          ],
+        text: {
+          format: {
+            type: "json_schema",
+            name:
+              "kwevora_resellable_digital_product_verification",
+            strict: true,
 
-          tool_choice: "auto",
+            schema: {
+              type: "object",
+              additionalProperties: false,
 
-          instructions: [
-            "You are KAI, the operating intelligence inside KWEVORA OS.",
-            "Always spell KWEVORA exactly K-W-E-V-O-R-A.",
-            "You are operating in KWEVORA MONEY MODE.",
-            "",
-            "You are performing DEEP OPPORTUNITY VERIFICATION.",
-            `Verification round: ${verificationRound}.`,
-            `Today is ${today}.`,
-            "",
-            "This verification controls whether KWEVORA is allowed to begin a real marketing campaign.",
-            "Be conservative.",
-            "",
-            "HARD RULE:",
-            "If the money path is not sufficiently verified, readyForTesting MUST be false.",
-            "",
-            "Your job is NOT to discover new opportunities.",
-            "Investigate only the supplied finalists.",
-            "",
-            "USE LIVE WEB SEARCH.",
-            "Do not rely on model memory for current affiliate terms.",
-            "",
-            "SOURCE PRIORITY:",
-            "1. Official company affiliate/partner pages.",
-            "2. Official affiliate-network listing for that company.",
-            "3. Official company pricing, help, terms, legal, or policy pages.",
-            "4. Reputable secondary sources only when official material cannot answer the question.",
-            "",
-            "When a prior unresolved fact is supplied, actively search for that exact fact.",
-            "",
-            "Do not mark commission verified unless a reliable current source establishes it.",
-            "Do not mark cookie duration verified unless a reliable current source establishes it.",
-            "Do not mark payout information verified unless a reliable current source establishes it.",
-            "Do not mark requirements verified unless reliable current evidence supports them.",
-            "",
-            "If official sources intentionally do not publish a particular term, say that clearly instead of guessing.",
-            "",
-            "If sources conflict, report the conflict and leave the fact unresolved.",
-            "",
-            "Never invent affiliate terms.",
-            "Never invent commission percentages.",
-            "Never invent cookie windows.",
-            "Never invent traffic minimums.",
-            "Never invent payout thresholds.",
-            "Never invent geographic availability.",
-            "Never invent reseller rights.",
-            "",
-            "If the affiliate program is unavailable, closed, discontinued, region-restricted for the user, or otherwise impractical, mark the candidate rejected when appropriate.",
-            "",
-            "FACELESS MARKETING:",
-            "Evaluate whether the offer can realistically be promoted with original faceless short-form marketing.",
-            "Consider original screen recordings, demonstrations, tutorials, comparisons, workflows, text-led videos, original voiceover, problem-solution storytelling, and properly authorized promotional assets.",
-            "Never assume copyrighted company footage can simply be copied.",
-            "",
-            "READY FOR TESTING requires:",
-            "- a real current monetization path",
-            "- the program appears currently available",
-            "- enough verified terms to understand how the user gets paid",
-            "- no unresolved issue that would make the campaign misleading or impractical",
-            "- a reasonable marketing method for this user's faceless strategy",
-            "",
-            "verificationStatus meanings:",
-            "verified = enough core facts are supported to safely begin a small test.",
-            "partially_verified = the program is real but one or more important business facts remain unresolved.",
-            "unverified = reliable evidence is insufficient.",
-            "rejected = KWEVORA should not pursue the opportunity based on current evidence.",
-            "",
-            "Do not tell the user to create campaign content or apply to a program when readyForTesting is false.",
-            "",
-            "Return only the required JSON.",
-          ].join("\n"),
-
-          input: [
-            {
-              role: "user",
-
-              content: [
-                {
-                  type:
-                    "input_text",
-
-                  text: [
-                    "KWEVORA MONEY MODE — DEEP FINALIST VERIFICATION",
-                    "",
-                    candidateText,
-                    "",
-                    `SPECIAL VERIFICATION FOCUS: ${
-                      focus ||
-                      "Verify every unresolved money-path fact."
-                    }`,
-                    "",
-                    "For every finalist check:",
-                    "- affiliate program currently exists",
-                    "- program is currently available",
-                    "- official signup destination",
-                    "- affiliate network",
-                    "- current commission structure",
-                    "- recurring commission details",
-                    "- cookie duration",
-                    "- payout terms",
-                    "- approval requirements",
-                    "- traffic requirements",
-                    "- geographic restrictions",
-                    "- relevant customer pricing",
-                    "- marketing restrictions",
-                    "- promotional asset rules",
-                    "- faceless marketing suitability",
-                    "- remaining unresolved facts",
-                    "- whether KWEVORA may safely begin a small marketing test",
-                    "",
-                    "Do not choose based on hype.",
-                    "Verify the money path.",
-                  ].join("\n"),
+              properties: {
+                summary: {
+                  type: "string",
                 },
-              ],
-            },
-          ],
 
-          text: {
-            format: {
-              type: "json_schema",
+                strongestVerifiedCandidate: {
+                  type: "string",
+                },
 
-              name:
-                "kwevora_deep_opportunity_verification",
+                candidates: {
+                  type: "array",
 
-              strict: true,
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
 
-              schema: {
-                type: "object",
+                    properties: {
+                      productName: {
+                        type: "string",
+                      },
 
-                additionalProperties:
-                  false,
+                      brand: {
+                        type: "string",
+                      },
 
-                properties: {
-                  summary: {
-                    type: "string",
-                  },
+                      verificationStatus: {
+                        type: "string",
+                        enum: [
+                          "verified",
+                          "partially_verified",
+                          "unverified",
+                          "rejected",
+                        ],
+                      },
 
-                  strongestVerifiedCandidate:
-                    {
-                      type: "string",
-                    },
-
-                  candidates: {
-                    type: "array",
-
-                    items: {
-                      type: "object",
-
-                      additionalProperties:
-                        false,
-
-                      properties: {
-                        productName: {
-                          type: "string",
-                        },
-
-                        brand: {
-                          type: "string",
-                        },
-
-                        verificationStatus:
-                          {
+                      source: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          verified: {
+                            type: "boolean",
+                          },
+                          seller: {
                             type: "string",
-
-                            enum: [
-                              "verified",
-                              "partially_verified",
-                              "unverified",
-                              "rejected",
-                            ],
                           },
-
-                        program: {
-                          type: "object",
-
-                          additionalProperties:
-                            false,
-
-                          properties: {
-                            exists: {
-                              type: "boolean",
-                            },
-
-                            currentlyAvailable:
-                              {
-                                type: "boolean",
-                              },
-
-                            programName: {
-                              type: "string",
-                            },
-
-                            signupUrl: {
-                              type: "string",
-                            },
-
-                            network: {
-                              type: "string",
-                            },
+                          productUrl: {
+                            type: "string",
                           },
-
-                          required: [
-                            "exists",
-                            "currentlyAvailable",
-                            "programName",
-                            "signupUrl",
-                            "network",
-                          ],
-                        },
-
-                        commission: {
-                          type: "object",
-
-                          additionalProperties:
-                            false,
-
-                          properties: {
-                            verified: {
-                              type: "boolean",
-                            },
-
-                            structure: {
-                              type: "string",
-                            },
-
-                            recurring: {
-                              type: "boolean",
-                            },
-
-                            recurringDetails:
-                              {
-                                type: "string",
-                              },
-                          },
-
-                          required: [
-                            "verified",
-                            "structure",
-                            "recurring",
-                            "recurringDetails",
-                          ],
-                        },
-
-                        cookie: {
-                          type: "object",
-
-                          additionalProperties:
-                            false,
-
-                          properties: {
-                            verified: {
-                              type: "boolean",
-                            },
-
-                            duration: {
-                              type: "string",
-                            },
-                          },
-
-                          required: [
-                            "verified",
-                            "duration",
-                          ],
-                        },
-
-                        payout: {
-                          type: "object",
-
-                          additionalProperties:
-                            false,
-
-                          properties: {
-                            verified: {
-                              type: "boolean",
-                            },
-
-                            details: {
-                              type: "string",
-                            },
-                          },
-
-                          required: [
-                            "verified",
-                            "details",
-                          ],
-                        },
-
-                        requirements: {
-                          type: "object",
-
-                          additionalProperties:
-                            false,
-
-                          properties: {
-                            verified: {
-                              type: "boolean",
-                            },
-
-                            approvalRequirements:
-                              {
-                                type: "array",
-
-                                items: {
-                                  type: "string",
-                                },
-                              },
-
-                            trafficRequirements:
-                              {
-                                type: "string",
-                              },
-
-                            geographicRestrictions:
-                              {
-                                type: "string",
-                              },
-                          },
-
-                          required: [
-                            "verified",
-                            "approvalRequirements",
-                            "trafficRequirements",
-                            "geographicRestrictions",
-                          ],
-                        },
-
-                        restrictions: {
-                          type: "array",
-
-                          items: {
+                          sourceReputation: {
                             type: "string",
                           },
                         },
+                        required: [
+                          "verified",
+                          "seller",
+                          "productUrl",
+                          "sourceReputation",
+                        ],
+                      },
 
-                        pricing: {
-                          type: "object",
-
-                          additionalProperties:
-                            false,
-
-                          properties: {
-                            verified: {
-                              type: "boolean",
-                            },
-
-                            details: {
-                              type: "string",
-                            },
+                      license: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          verified: {
+                            type: "boolean",
                           },
-
-                          required: [
-                            "verified",
-                            "details",
-                          ],
+                          licenseType: {
+                            type: "string",
+                          },
+                          licenseUrl: {
+                            type: "string",
+                          },
+                          resaleToEndCustomers: {
+                            type: "boolean",
+                          },
+                          rebrandingAllowed: {
+                            type: "boolean",
+                          },
+                          modificationAllowed: {
+                            type: "boolean",
+                          },
+                          transferableResaleRights: {
+                            type: "boolean",
+                          },
+                          details: {
+                            type: "string",
+                          },
                         },
+                        required: [
+                          "verified",
+                          "licenseType",
+                          "licenseUrl",
+                          "resaleToEndCustomers",
+                          "rebrandingAllowed",
+                          "modificationAllowed",
+                          "transferableResaleRights",
+                          "details",
+                        ],
+                      },
 
-                        facelessMarketing:
-                          {
-                            type: "object",
-
-                            additionalProperties:
-                              false,
-
-                            properties: {
-                              suitable: {
-                                type: "boolean",
-                              },
-
-                              score: {
-                                type: "integer",
-                                minimum: 0,
-                                maximum: 100,
-                              },
-
-                              reason: {
-                                type: "string",
-                              },
-
-                              legalAssetNotes:
-                                {
-                                  type: "string",
-                                },
-
-                              contentAngles:
-                                {
-                                  type: "array",
-
-                                  items: {
-                                    type: "string",
-                                  },
-                                },
-                            },
-
-                            required: [
-                              "suitable",
-                              "score",
-                              "reason",
-                              "legalAssetNotes",
-                              "contentAngles",
-                            ],
+                      acquisition: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          verified: {
+                            type: "boolean",
                           },
+                          cost: {
+                            type: "string",
+                          },
+                          recurringFees: {
+                            type: "string",
+                          },
+                        },
+                        required: [
+                          "verified",
+                          "cost",
+                          "recurringFees",
+                        ],
+                      },
 
-                        monetizationConfidence:
-                          {
+                      resale: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          verified: {
+                            type: "boolean",
+                          },
+                          permittedPrice: {
+                            type: "string",
+                          },
+                          minimumPrice: {
+                            type: "string",
+                          },
+                          suggestedPrice: {
+                            type: "string",
+                          },
+                        },
+                        required: [
+                          "verified",
+                          "permittedPrice",
+                          "minimumPrice",
+                          "suggestedPrice",
+                        ],
+                      },
+
+                      margin: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          verified: {
+                            type: "boolean",
+                          },
+                          details: {
+                            type: "string",
+                          },
+                          score: {
                             type: "integer",
                             minimum: 0,
                             maximum: 100,
                           },
+                        },
+                        required: [
+                          "verified",
+                          "details",
+                          "score",
+                        ],
+                      },
 
-                        verifiedFacts: {
-                          type: "array",
-
-                          items: {
+                      demand: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          verified: {
+                            type: "boolean",
+                          },
+                          score: {
+                            type: "integer",
+                            minimum: 0,
+                            maximum: 100,
+                          },
+                          evidence: {
+                            type: "array",
+                            items: {
+                              type: "string",
+                            },
+                          },
+                          details: {
                             type: "string",
                           },
                         },
+                        required: [
+                          "verified",
+                          "score",
+                          "evidence",
+                          "details",
+                        ],
+                      },
 
-                        unresolvedFacts: {
-                          type: "array",
-
-                          items: {
+                      quality: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          verified: {
+                            type: "boolean",
+                          },
+                          score: {
+                            type: "integer",
+                            minimum: 0,
+                            maximum: 100,
+                          },
+                          details: {
+                            type: "string",
+                          },
+                          freshnessConcerns: {
                             type: "string",
                           },
                         },
+                        required: [
+                          "verified",
+                          "score",
+                          "details",
+                          "freshnessConcerns",
+                        ],
+                      },
 
-                        warnings: {
-                          type: "array",
-
-                          items: {
+                      competition: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          verified: {
+                            type: "boolean",
+                          },
+                          score: {
+                            type: "integer",
+                            minimum: 0,
+                            maximum: 100,
+                          },
+                          saturationRisk: {
+                            type: "string",
+                          },
+                          details: {
                             type: "string",
                           },
                         },
+                        required: [
+                          "verified",
+                          "score",
+                          "saturationRisk",
+                          "details",
+                        ],
+                      },
 
-                        readyForTesting: {
-                          type: "boolean",
-                        },
-
-                        nextAction: {
+                      restrictions: {
+                        type: "array",
+                        items: {
                           type: "string",
                         },
                       },
 
-                      required: [
-                        "productName",
-                        "brand",
-                        "verificationStatus",
-                        "program",
-                        "commission",
-                        "cookie",
-                        "payout",
-                        "requirements",
-                        "restrictions",
-                        "pricing",
-                        "facelessMarketing",
-                        "monetizationConfidence",
-                        "verifiedFacts",
-                        "unresolvedFacts",
-                        "warnings",
-                        "readyForTesting",
-                        "nextAction",
-                      ],
+                      requirements: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          verified: {
+                            type: "boolean",
+                          },
+                          marketplaceRestrictions: {
+                            type: "array",
+                            items: {
+                              type: "string",
+                            },
+                          },
+                          advertisingRestrictions: {
+                            type: "array",
+                            items: {
+                              type: "string",
+                            },
+                          },
+                          bundlingRestrictions: {
+                            type: "array",
+                            items: {
+                              type: "string",
+                            },
+                          },
+                          giveawayRestrictions: {
+                            type: "array",
+                            items: {
+                              type: "string",
+                            },
+                          },
+                          geographicRestrictions: {
+                            type: "string",
+                          },
+                        },
+                        required: [
+                          "verified",
+                          "marketplaceRestrictions",
+                          "advertisingRestrictions",
+                          "bundlingRestrictions",
+                          "giveawayRestrictions",
+                          "geographicRestrictions",
+                        ],
+                      },
+
+                      pricing: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          verified: {
+                            type: "boolean",
+                          },
+                          details: {
+                            type: "string",
+                          },
+                        },
+                        required: [
+                          "verified",
+                          "details",
+                        ],
+                      },
+
+                      facelessMarketing: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          suitable: {
+                            type: "boolean",
+                          },
+                          score: {
+                            type: "integer",
+                            minimum: 0,
+                            maximum: 100,
+                          },
+                          reason: {
+                            type: "string",
+                          },
+                          legalAssetNotes: {
+                            type: "string",
+                          },
+                          contentAngles: {
+                            type: "array",
+                            items: {
+                              type: "string",
+                            },
+                          },
+                        },
+                        required: [
+                          "suitable",
+                          "score",
+                          "reason",
+                          "legalAssetNotes",
+                          "contentAngles",
+                        ],
+                      },
+
+                      monetizationConfidence: {
+                        type: "integer",
+                        minimum: 0,
+                        maximum: 100,
+                      },
+
+                      verifiedFacts: {
+                        type: "array",
+                        items: {
+                          type: "string",
+                        },
+                      },
+
+                      unresolvedFacts: {
+                        type: "array",
+                        items: {
+                          type: "string",
+                        },
+                      },
+
+                      warnings: {
+                        type: "array",
+                        items: {
+                          type: "string",
+                        },
+                      },
+
+                      readyForTesting: {
+                        type: "boolean",
+                      },
+
+                      nextAction: {
+                        type: "string",
+                      },
                     },
+
+                    required: [
+                      "productName",
+                      "brand",
+                      "verificationStatus",
+                      "source",
+                      "license",
+                      "acquisition",
+                      "resale",
+                      "margin",
+                      "demand",
+                      "quality",
+                      "competition",
+                      "restrictions",
+                      "requirements",
+                      "pricing",
+                      "facelessMarketing",
+                      "monetizationConfidence",
+                      "verifiedFacts",
+                      "unresolvedFacts",
+                      "warnings",
+                      "readyForTesting",
+                      "nextAction",
+                    ],
                   },
                 },
-
-                required: [
-                  "summary",
-                  "strongestVerifiedCandidate",
-                  "candidates",
-                ],
               },
+
+              required: [
+                "summary",
+                "strongestVerifiedCandidate",
+                "candidates",
+              ],
             },
           },
-        }),
-      }
-    );
+        },
+      }),
+    }
+  );
 
-  const data =
-    await response.json();
+  const data = await response.json();
 
   if (!response.ok) {
     throw new Error(
       data?.error?.message ||
-        "KAI could not complete deep opportunity verification."
+        "KAI could not complete resellable digital product verification."
     );
   }
 
-  const outputText =
-    extractOutputText(data);
+  const outputText = extractOutputText(data);
 
   if (!outputText) {
     throw new Error(
@@ -1100,73 +1211,82 @@ async function deeplyVerify({
   let parsed: any;
 
   try {
-    parsed =
-      JSON.parse(outputText);
+    parsed = JSON.parse(outputText);
   } catch {
     throw new Error(
       "KAI returned verification results that KWEVORA could not read."
     );
   }
 
-  const verifiedCandidates =
-    Array.isArray(
-      parsed?.candidates
-    )
+  /*
+   * Explicitly type the mapped array so
+   * TypeScript knows every item is a
+   * VerifiedCandidate. This also fixes the
+   * filter/sort inference errors.
+   */
+  const verifiedCandidates: VerifiedCandidate[] =
+    Array.isArray(parsed?.candidates)
       ? parsed.candidates.map(
-          normalizeCandidate
+          (candidate: unknown) =>
+            normalizeCandidate(candidate)
         )
       : [];
 
+  const actuallyReady: VerifiedCandidate[] =
+    verifiedCandidates
+      .filter(
+        (candidate: VerifiedCandidate) =>
+          candidate.readyForTesting === true &&
+          candidate.verificationStatus === "verified" &&
+          candidate.license.verified === true &&
+          candidate.license.resaleToEndCustomers === true
+      )
+      .sort(
+        (
+          a: VerifiedCandidate,
+          b: VerifiedCandidate
+        ) =>
+          b.monetizationConfidence -
+          a.monetizationConfidence
+      );
+
+  const strongestVerifiedCandidate =
+    actuallyReady.length > 0
+      ? actuallyReady[0].productName
+      : "";
+
   return {
     report: {
-      verifiedAt:
-        new Date().toISOString(),
-
+      verifiedAt: new Date().toISOString(),
       verificationRound,
-
-      mode:
-        "KWEVORA_MONEY_MODE",
-
+      mode: "KWEVORA_MONEY_MODE",
       capability:
-        "DEEP_OPPORTUNITY_VERIFICATION",
-
-      candidates:
-        verifiedCandidates,
-
-      strongestVerifiedCandidate:
-        cleanString(
-          parsed
-            ?.strongestVerifiedCandidate
-        ),
-
-      summary:
-        cleanString(
-          parsed?.summary
-        ),
+        "RESELLABLE_DIGITAL_PRODUCT_VERIFICATION",
+      businessModel:
+        "existing_resellable_digital_products",
+      candidates: verifiedCandidates,
+      strongestVerifiedCandidate,
+      summary: cleanString(parsed?.summary),
     } satisfies VerificationReport,
 
-    sources:
-      extractSources(data),
+    sources: extractSources(data),
   };
 }
 
 export async function GET() {
   return NextResponse.json({
     success: true,
-
-    mode:
-      "KWEVORA_MONEY_MODE",
-
+    mode: "KWEVORA_MONEY_MODE",
     capability:
-      "DEEP_OPPORTUNITY_VERIFICATION",
-
+      "RESELLABLE_DIGITAL_PRODUCT_VERIFICATION",
+    businessModel:
+      "existing_resellable_digital_products",
     status: "ready",
-
-    automaticReverification:
-      true,
-
+    automaticReverification: true,
+    hardGate:
+      "The exact product must have reliable evidence permitting resale to end customers before KWEVORA can authorize a sales test.",
     mission:
-      "Verify the real money path before KWEVORA commits to an opportunity.",
+      "Verify the product, seller, resale license, demand, economics, quality, restrictions, and marketing viability before KWEVORA commits to selling it.",
   });
 }
 
@@ -1186,11 +1306,9 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-
           message:
             "OPENAI_API_KEY is missing from the KWEVORA environment.",
         },
-
         {
           status: 500,
         }
@@ -1205,19 +1323,23 @@ export async function POST(
     const focus =
       cleanString(body.focus);
 
-    const candidates =
-      Array.isArray(
-        body.candidates
-      )
+    const candidates: CandidateInput[] =
+      Array.isArray(body.candidates)
         ? body.candidates
             .filter(
-              (candidate) =>
-                cleanString(
-                  candidate
-                    ?.productName
-                ) ||
-                cleanString(
-                  candidate?.brand
+              (
+                candidate: CandidateInput
+              ) =>
+                Boolean(
+                  cleanString(
+                    candidate.productName
+                  ) ||
+                    cleanString(
+                      candidate.brand
+                    ) ||
+                    cleanString(
+                      candidate.seller
+                    )
                 )
             )
             .slice(0, 3)
@@ -1227,11 +1349,9 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-
           message:
-            "KAI needs at least one finalist to verify.",
+            "KAI needs at least one digital-product finalist to verify.",
         },
-
         {
           status: 400,
         }
@@ -1248,34 +1368,27 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-
       ...result.report,
-
       sourceCount:
         result.sources.length,
-
-      sources:
-        result.sources,
+      sources: result.sources,
     });
   } catch (error) {
     console.error(
-      "KWEVORA deep opportunity verification failed:",
+      "KWEVORA resellable digital product verification failed:",
       error
     );
 
     return NextResponse.json(
       {
         success: false,
-
         mode:
           "KWEVORA_MONEY_MODE",
-
         message:
           error instanceof Error
             ? error.message
-            : "KAI could not verify the finalists.",
+            : "KAI could not verify the digital-product finalists.",
       },
-
       {
         status: 500,
       }

@@ -51,6 +51,10 @@ import {
 } from "./database/OvernightReportRepository";
 
 import {
+  supabaseServer,
+} from "./supabaseServer";
+
+import {
   existsSync,
   mkdirSync,
   readFileSync,
@@ -526,6 +530,43 @@ function buildWarnings(
   );
 }
 
+async function saveOvernightReportToCloud(
+  storedReport:
+    StoredOvernightReport,
+
+  report:
+    OvernightReport,
+) {
+  const {
+    error,
+  } =
+    await supabaseServer
+      .from(
+        "kai_overnight_reports",
+      )
+      .upsert(
+        {
+          report_id:
+            storedReport.id,
+
+          report,
+
+          created_at:
+            storedReport.createdAt,
+        },
+        {
+          onConflict:
+            "report_id",
+        },
+      );
+
+  if (error) {
+    throw new Error(
+      `KAI saved the overnight report locally but could not save it to Supabase: ${error.message}`,
+    );
+  }
+}
+
 export class OvernightEngine {
   async run(
     request:
@@ -854,6 +895,11 @@ export class OvernightEngine {
         .save(
           report,
         );
+
+    await saveOvernightReportToCloud(
+      storedReport,
+      report,
+    );
 
     return {
       report,
