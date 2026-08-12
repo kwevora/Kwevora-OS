@@ -1,6 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 type MessageRole = "user" | "kai";
 
@@ -18,10 +24,24 @@ type BusinessDirective = {
   active: boolean;
 };
 
-type MessageIntent = "question" | "directive" | "brainstorm" | "conversation";
+type MessageIntent =
+  | "question"
+  | "directive"
+  | "brainstorm"
+  | "conversation";
 
-const MESSAGE_STORAGE_KEY = "kwevora-kai-conversation";
-const DIRECTIVE_STORAGE_KEY = "kwevora-business-directives";
+type KaiChatResponse = {
+  success?: boolean;
+  reply?: string;
+  newDirectives?: string[];
+  message?: string;
+};
+
+const MESSAGE_STORAGE_KEY =
+  "kwevora-kai-conversation";
+
+const DIRECTIVE_STORAGE_KEY =
+  "kwevora-business-directives";
 
 const defaultMessages: KaiMessage[] = [
   {
@@ -34,157 +54,314 @@ const defaultMessages: KaiMessage[] = [
 ];
 
 export default function TalkToKAI() {
-  const [messages, setMessages] = useState<KaiMessage[]>(defaultMessages);
-  const [directives, setDirectives] = useState<BusinessDirective[]>([]);
-  const [messageText, setMessageText] = useState("");
-  const [isThinking, setIsThinking] = useState(false);
-  const conversationEndRef = useRef<HTMLDivElement | null>(null);
+  const [messages, setMessages] =
+    useState<KaiMessage[]>(
+      defaultMessages,
+    );
+
+  const [directives, setDirectives] =
+    useState<BusinessDirective[]>(
+      [],
+    );
+
+  const [messageText, setMessageText] =
+    useState("");
+
+  const [isThinking, setIsThinking] =
+    useState(false);
+
+  const conversationEndRef =
+    useRef<HTMLDivElement | null>(
+      null,
+    );
 
   useEffect(() => {
-    const savedMessages = window.localStorage.getItem(MESSAGE_STORAGE_KEY);
-    const savedDirectives = window.localStorage.getItem(DIRECTIVE_STORAGE_KEY);
+    const savedMessages =
+      window.localStorage.getItem(
+        MESSAGE_STORAGE_KEY,
+      );
+
+    const savedDirectives =
+      window.localStorage.getItem(
+        DIRECTIVE_STORAGE_KEY,
+      );
 
     if (savedMessages) {
       try {
-        const parsedMessages = JSON.parse(savedMessages) as KaiMessage[];
+        const parsedMessages =
+          JSON.parse(
+            savedMessages,
+          ) as KaiMessage[];
 
-        if (Array.isArray(parsedMessages) && parsedMessages.length > 0) {
-          setMessages(parsedMessages);
+        if (
+          Array.isArray(
+            parsedMessages,
+          ) &&
+          parsedMessages.length > 0
+        ) {
+          setMessages(
+            parsedMessages,
+          );
         }
       } catch {
-        window.localStorage.removeItem(MESSAGE_STORAGE_KEY);
+        window.localStorage.removeItem(
+          MESSAGE_STORAGE_KEY,
+        );
       }
     }
 
     if (savedDirectives) {
       try {
-        const parsedDirectives = JSON.parse(
-          savedDirectives,
-        ) as BusinessDirective[];
+        const parsedDirectives =
+          JSON.parse(
+            savedDirectives,
+          ) as BusinessDirective[];
 
-        if (Array.isArray(parsedDirectives)) {
-          setDirectives(parsedDirectives);
+        if (
+          Array.isArray(
+            parsedDirectives,
+          )
+        ) {
+          setDirectives(
+            parsedDirectives,
+          );
         }
       } catch {
-        window.localStorage.removeItem(DIRECTIVE_STORAGE_KEY);
+        window.localStorage.removeItem(
+          DIRECTIVE_STORAGE_KEY,
+        );
       }
     }
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(MESSAGE_STORAGE_KEY, JSON.stringify(messages));
+    window.localStorage.setItem(
+      MESSAGE_STORAGE_KEY,
+      JSON.stringify(
+        messages,
+      ),
+    );
   }, [messages]);
 
   useEffect(() => {
     window.localStorage.setItem(
       DIRECTIVE_STORAGE_KEY,
-      JSON.stringify(directives),
+      JSON.stringify(
+        directives,
+      ),
     );
   }, [directives]);
 
   useEffect(() => {
-    conversationEndRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "nearest",
-    });
+    conversationEndRef
+      .current
+      ?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
   }, [messages, isThinking]);
 
-  const activeDirectives = useMemo(
-    () => directives.filter((directive) => directive.active),
-    [directives],
-  );
+  const activeDirectives =
+    useMemo(
+      () =>
+        directives.filter(
+          (directive) =>
+            directive.active,
+        ),
+      [directives],
+    );
 
-  async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
+  async function handleSendMessage(
+    event: FormEvent<HTMLFormElement>,
+  ) {
     event.preventDefault();
 
-    const trimmedMessage = messageText.trim();
+    const trimmedMessage =
+      messageText.trim();
 
-    if (!trimmedMessage || isThinking) {
+    if (
+      !trimmedMessage ||
+      isThinking
+    ) {
       return;
     }
 
-    const userMessage: KaiMessage = {
-      id: createId("user"),
-      role: "user",
-      text: trimmedMessage,
-      createdAt: new Date().toISOString(),
-    };
+    const userMessage: KaiMessage =
+      {
+        id: createId("user"),
+        role: "user",
+        text: trimmedMessage,
+        createdAt:
+          new Date().toISOString(),
+      };
 
-    setMessages((currentMessages) => [...currentMessages, userMessage]);
+    const conversationForKai = [
+      ...messages,
+      userMessage,
+    ].slice(-20);
+
+    const intent =
+      detectIntent(
+        trimmedMessage,
+      );
+
+    setMessages(
+      (currentMessages) => [
+        ...currentMessages,
+        userMessage,
+      ],
+    );
+
     setMessageText("");
     setIsThinking(true);
 
-    const intent = detectIntent(trimmedMessage);
+    try {
+      const response =
+        await fetch(
+          "/api/kai/chat",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            cache: "no-store",
+            body: JSON.stringify({
+              message:
+                trimmedMessage,
+              intent,
+              conversation:
+                conversationForKai.map(
+                  (message) => ({
+                    role:
+                      message.role,
+                    text:
+                      message.text,
+                  }),
+                ),
+              directives:
+                activeDirectives.map(
+                  (directive) =>
+                    directive.text,
+                ),
+            }),
+          },
+        );
 
-    await new Promise((resolve) => window.setTimeout(resolve, 450));
+      const data =
+        (await response
+          .json()
+          .catch(
+            () => ({}),
+          )) as KaiChatResponse;
 
-    if (intent === "directive") {
-      const directive: BusinessDirective = {
-        id: createId("directive"),
-        text: cleanDirectiveText(trimmedMessage),
-        createdAt: new Date().toISOString(),
-        active: true,
+      if (
+        !response.ok ||
+        !data.success ||
+        !data.reply?.trim()
+      ) {
+        throw new Error(
+          data.message ||
+            "KAI could not complete the response.",
+        );
+      }
+
+      const newDirectives =
+        Array.isArray(
+          data.newDirectives,
+        )
+          ? data.newDirectives
+              .map((item) =>
+                cleanDirectiveText(
+                  item,
+                ),
+              )
+              .filter(Boolean)
+          : [];
+
+      if (
+        newDirectives.length >
+        0
+      ) {
+        setDirectives(
+          (currentDirectives) =>
+            mergeDirectives(
+              currentDirectives,
+              newDirectives,
+            ),
+        );
+      }
+
+      addKaiMessage(
+        data.reply.trim(),
+      );
+    } catch (error) {
+      addKaiMessage(
+        error instanceof Error
+          ? `I hit a connection problem: ${error.message}`
+          : "I hit a connection problem while thinking through that.",
+      );
+    } finally {
+      setIsThinking(false);
+    }
+  }
+
+  function addKaiMessage(
+    text: string,
+  ) {
+    const kaiMessage: KaiMessage =
+      {
+        id: createId("kai"),
+        role: "kai",
+        text,
+        createdAt:
+          new Date().toISOString(),
       };
 
-      setDirectives((currentDirectives) => [
-        directive,
-        ...currentDirectives,
-      ]);
-
-      addKaiMessage(
-        `Understood. I saved this as an active business directive: “${directive.text}” Future planning and recommendations should follow this direction.`,
-      );
-    } else if (intent === "brainstorm") {
-      addKaiMessage(
-        "I understand that you want to explore a new direction. The conversation system is ready, and the next intelligence connection will allow me to evaluate the idea using your business goals, current work, and results.",
-      );
-    } else if (intent === "question") {
-      addKaiMessage(
-        "I received your question. The conversation foundation is working. The next connection will send questions through KAI’s reasoning engine so I can answer using your real business information instead of giving a generic response.",
-      );
-    } else {
-      addKaiMessage(
-        "I understand. I saved this conversation so we can continue from the same place. When this panel is connected to KAI’s reasoning engine, I’ll use the full business context before responding or taking action.",
-      );
-    }
-
-    setIsThinking(false);
-  }
-
-  function addKaiMessage(text: string) {
-    const kaiMessage: KaiMessage = {
-      id: createId("kai"),
-      role: "kai",
-      text,
-      createdAt: new Date().toISOString(),
-    };
-
-    setMessages((currentMessages) => [...currentMessages, kaiMessage]);
-  }
-
-  function toggleDirective(directiveId: string) {
-    setDirectives((currentDirectives) =>
-      currentDirectives.map((directive) =>
-        directive.id === directiveId
-          ? {
-              ...directive,
-              active: !directive.active,
-            }
-          : directive,
-      ),
+    setMessages(
+      (currentMessages) => [
+        ...currentMessages,
+        kaiMessage,
+      ],
     );
   }
 
-  function removeDirective(directiveId: string) {
-    setDirectives((currentDirectives) =>
-      currentDirectives.filter(
-        (directive) => directive.id !== directiveId,
-      ),
+  function toggleDirective(
+    directiveId: string,
+  ) {
+    setDirectives(
+      (currentDirectives) =>
+        currentDirectives.map(
+          (directive) =>
+            directive.id ===
+            directiveId
+              ? {
+                  ...directive,
+                  active:
+                    !directive.active,
+                }
+              : directive,
+        ),
+    );
+  }
+
+  function removeDirective(
+    directiveId: string,
+  ) {
+    setDirectives(
+      (currentDirectives) =>
+        currentDirectives.filter(
+          (directive) =>
+            directive.id !==
+            directiveId,
+        ),
     );
   }
 
   function clearConversation() {
-    setMessages(defaultMessages);
+    setMessages(
+      defaultMessages,
+    );
   }
 
   return (
@@ -198,18 +375,24 @@ export default function TalkToKAI() {
               </p>
 
               <h2 className="mt-2 text-2xl font-black">
-                Redirect the business anytime.
+                Redirect the
+                business anytime.
               </h2>
 
               <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
-                Ask a question, change the strategy, or tell KAI what should
+                Ask a question,
+                change the
+                strategy, or tell
+                KAI what should
                 happen next.
               </p>
             </div>
 
             <button
               type="button"
-              onClick={clearConversation}
+              onClick={
+                clearConversation
+              }
               className="shrink-0 rounded-full border border-white/15 px-4 py-2 text-sm font-bold text-gray-400 transition hover:border-white/30 hover:text-white"
             >
               Clear conversation
@@ -219,9 +402,18 @@ export default function TalkToKAI() {
 
         <div className="flex h-[420px] flex-col">
           <div className="flex-1 space-y-4 overflow-y-auto p-5 sm:p-6">
-            {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
-            ))}
+            {messages.map(
+              (message) => (
+                <MessageBubble
+                  key={
+                    message.id
+                  }
+                  message={
+                    message
+                  }
+                />
+              ),
+            )}
 
             {isThinking && (
               <div className="flex justify-start">
@@ -235,25 +427,49 @@ export default function TalkToKAI() {
               </div>
             )}
 
-            <div ref={conversationEndRef} />
+            <div
+              ref={
+                conversationEndRef
+              }
+            />
           </div>
 
           <form
-            onSubmit={handleSendMessage}
+            onSubmit={
+              handleSendMessage
+            }
             className="border-t border-white/10 p-4 sm:p-5"
           >
             <div className="flex items-end gap-3 rounded-3xl border border-white/10 bg-white/[0.04] p-2 transition focus-within:border-purple-500/50">
               <textarea
-                value={messageText}
-                onChange={(event) => setMessageText(event.target.value)}
-                onKeyDown={(event) => {
+                value={
+                  messageText
+                }
+                onChange={(
+                  event,
+                ) =>
+                  setMessageText(
+                    event.target
+                      .value,
+                  )
+                }
+                onKeyDown={(
+                  event,
+                ) => {
                   if (
-                    event.key === "Enter" &&
+                    event.key ===
+                      "Enter" &&
                     !event.shiftKey &&
-                    !event.nativeEvent.isComposing
+                    !event
+                      .nativeEvent
+                      .isComposing
                   ) {
                     event.preventDefault();
-                    event.currentTarget.form?.requestSubmit();
+
+                    event
+                      .currentTarget
+                      .form
+                      ?.requestSubmit();
                   }
                 }}
                 rows={2}
@@ -263,7 +479,10 @@ export default function TalkToKAI() {
 
               <button
                 type="submit"
-                disabled={!messageText.trim() || isThinking}
+                disabled={
+                  !messageText.trim() ||
+                  isThinking
+                }
                 className="rounded-full bg-purple-600 px-6 py-3 font-black text-white transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Send
@@ -271,7 +490,10 @@ export default function TalkToKAI() {
             </div>
 
             <p className="mt-3 px-2 text-xs text-gray-600">
-              Press Enter to send. Use Shift + Enter for a new line.
+              Press Enter to
+              send. Use Shift +
+              Enter for a new
+              line.
             </p>
           </form>
         </div>
@@ -281,89 +503,123 @@ export default function TalkToKAI() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-bold uppercase tracking-[0.22em] text-gray-500">
-              Current Directives
+              Current
+              Directives
             </p>
 
             <h2 className="mt-2 text-2xl font-black">
-              How KAI should operate
+              How KAI should
+              operate
             </h2>
           </div>
 
           <span className="rounded-full bg-purple-500/15 px-3 py-1 text-xs font-bold text-purple-300">
-            {activeDirectives.length} active
+            {
+              activeDirectives.length
+            }{" "}
+            active
           </span>
         </div>
 
         <p className="mt-3 text-sm leading-6 text-gray-400">
-          Strategic instructions stay active until you pause or remove them.
+          Strategic
+          instructions stay
+          active until you
+          pause or remove
+          them.
         </p>
 
         <div className="mt-6 space-y-3">
-          {directives.length === 0 ? (
+          {directives.length ===
+          0 ? (
             <div className="rounded-2xl border border-dashed border-white/10 p-5">
               <p className="font-bold text-gray-300">
-                No directives saved yet.
+                No directives
+                saved yet.
               </p>
 
               <p className="mt-2 text-sm leading-6 text-gray-500">
-                Try saying: “Focus more on affiliate marketing this week.”
+                Talk naturally.
+                KAI will save
+                durable operating
+                instructions when
+                they should guide
+                future work.
               </p>
             </div>
           ) : (
-            directives.map((directive) => (
-              <article
-                key={directive.id}
-                className={`rounded-2xl border p-4 transition ${
-                  directive.active
-                    ? "border-purple-500/25 bg-purple-500/10"
-                    : "border-white/10 bg-white/[0.025] opacity-60"
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <button
-                    type="button"
-                    onClick={() => toggleDirective(directive.id)}
-                    aria-label={
-                      directive.active
-                        ? "Pause directive"
-                        : "Activate directive"
-                    }
-                    className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-black transition ${
-                      directive.active
-                        ? "border-purple-400 bg-purple-500 text-white"
-                        : "border-white/20 text-gray-500"
-                    }`}
-                  >
-                    {directive.active ? "✓" : ""}
-                  </button>
-
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className={`font-bold leading-6 ${
+            directives.map(
+              (directive) => (
+                <article
+                  key={
+                    directive.id
+                  }
+                  className={`rounded-2xl border p-4 transition ${
+                    directive.active
+                      ? "border-purple-500/25 bg-purple-500/10"
+                      : "border-white/10 bg-white/[0.025] opacity-60"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        toggleDirective(
+                          directive.id,
+                        )
+                      }
+                      aria-label={
                         directive.active
-                          ? "text-white"
-                          : "text-gray-500 line-through"
+                          ? "Pause directive"
+                          : "Activate directive"
+                      }
+                      className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-black transition ${
+                        directive.active
+                          ? "border-purple-400 bg-purple-500 text-white"
+                          : "border-white/20 text-gray-500"
                       }`}
                     >
-                      {directive.text}
-                    </p>
+                      {directive.active
+                        ? "✓"
+                        : ""}
+                    </button>
 
-                    <p className="mt-2 text-xs text-gray-600">
-                      {directive.active ? "Active directive" : "Paused"}
-                    </p>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`font-bold leading-6 ${
+                          directive.active
+                            ? "text-white"
+                            : "text-gray-500 line-through"
+                        }`}
+                      >
+                        {
+                          directive.text
+                        }
+                      </p>
+
+                      <p className="mt-2 text-xs text-gray-600">
+                        {directive.active
+                          ? "Active directive"
+                          : "Paused"}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        removeDirective(
+                          directive.id,
+                        )
+                      }
+                      className="shrink-0 rounded-full px-2 py-1 text-sm text-gray-600 transition hover:bg-red-500/10 hover:text-red-300"
+                      aria-label="Remove directive"
+                    >
+                      ×
+                    </button>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => removeDirective(directive.id)}
-                    className="shrink-0 rounded-full px-2 py-1 text-sm text-gray-600 transition hover:bg-red-500/10 hover:text-red-300"
-                    aria-label="Remove directive"
-                  >
-                    ×
-                  </button>
-                </div>
-              </article>
-            ))
+                </article>
+              ),
+            )
           )}
         </div>
       </div>
@@ -371,11 +627,22 @@ export default function TalkToKAI() {
   );
 }
 
-function MessageBubble({ message }: { message: KaiMessage }) {
-  const isUser = message.role === "user";
+function MessageBubble({
+  message,
+}: {
+  message: KaiMessage;
+}) {
+  const isUser =
+    message.role === "user";
 
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+    <div
+      className={`flex ${
+        isUser
+          ? "justify-end"
+          : "justify-start"
+      }`}
+    >
       <div
         className={`max-w-[88%] rounded-3xl px-5 py-4 sm:max-w-[78%] ${
           isUser
@@ -397,8 +664,32 @@ function MessageBubble({ message }: { message: KaiMessage }) {
   );
 }
 
-function detectIntent(message: string): MessageIntent {
-  const normalizedMessage = message.trim().toLowerCase();
+function detectIntent(
+  message: string,
+): MessageIntent {
+  const normalizedMessage =
+    message
+      .trim()
+      .toLowerCase();
+
+  const questionStarts = [
+    "what ",
+    "why ",
+    "how ",
+    "when ",
+    "where ",
+    "who ",
+    "which ",
+    "should ",
+    "can ",
+    "could ",
+    "would ",
+    "do ",
+    "does ",
+    "did ",
+    "is ",
+    "are ",
+  ];
 
   const brainstormWords = [
     "brainstorm",
@@ -408,65 +699,126 @@ function detectIntent(message: string): MessageIntent {
     "explore",
   ];
 
-  const directiveWords = [
-    "focus on",
-    "prioritize",
-    "stop",
-    "pause",
-    "start",
-    "change",
-    "shift",
-    "use more",
-    "use less",
-    "post more",
-    "post less",
-    "do not",
-    "don't",
-    "from now on",
-    "this week",
-    "this month",
-    "our goal is",
-    "i want kai to",
-    "i want you to",
-  ];
-
   if (
-    brainstormWords.some((phrase) => normalizedMessage.includes(phrase))
-  ) {
-    return "brainstorm";
-  }
-
-  if (
-    directiveWords.some((phrase) => normalizedMessage.includes(phrase))
-  ) {
-    return "directive";
-  }
-
-  if (
-    normalizedMessage.endsWith("?") ||
-    normalizedMessage.startsWith("what ") ||
-    normalizedMessage.startsWith("why ") ||
-    normalizedMessage.startsWith("how ") ||
-    normalizedMessage.startsWith("when ") ||
-    normalizedMessage.startsWith("should ") ||
-    normalizedMessage.startsWith("can ")
+    normalizedMessage.endsWith(
+      "?",
+    ) ||
+    questionStarts.some(
+      (phrase) =>
+        normalizedMessage.startsWith(
+          phrase,
+        ),
+    )
   ) {
     return "question";
+  }
+
+  if (
+    brainstormWords.some(
+      (phrase) =>
+        normalizedMessage.includes(
+          phrase,
+        ),
+    )
+  ) {
+    return "brainstorm";
   }
 
   return "conversation";
 }
 
-function cleanDirectiveText(message: string) {
-  const cleanedMessage = message
-    .trim()
-    .replace(/^kai[:,]?\s*/i, "")
-    .replace(/\s+/g, " ");
+function mergeDirectives(
+  existing: BusinessDirective[],
+  incoming: string[],
+): BusinessDirective[] {
+  const existingNormalized =
+    new Set(
+      existing.map(
+        (directive) =>
+          directive.text
+            .trim()
+            .toLowerCase(),
+      ),
+    );
 
-  return cleanedMessage.charAt(0).toUpperCase() + cleanedMessage.slice(1);
+  const additions: BusinessDirective[] =
+    [];
+
+  for (
+    const rawDirective
+    of incoming
+  ) {
+    const text =
+      cleanDirectiveText(
+        rawDirective,
+      );
+
+    if (!text) {
+      continue;
+    }
+
+    const normalized =
+      text.toLowerCase();
+
+    if (
+      existingNormalized.has(
+        normalized,
+      )
+    ) {
+      continue;
+    }
+
+    existingNormalized.add(
+      normalized,
+    );
+
+    additions.push({
+      id: createId(
+        "directive",
+      ),
+      text,
+      createdAt:
+        new Date().toISOString(),
+      active: true,
+    });
+  }
+
+  return [
+    ...additions,
+    ...existing,
+  ];
 }
 
-function createId(prefix: string) {
+function cleanDirectiveText(
+  message: string,
+) {
+  const cleanedMessage =
+    message
+      .trim()
+      .replace(
+        /^kai[:,]?\s*/i,
+        "",
+      )
+      .replace(
+        /\s+/g,
+        " ",
+      );
+
+  if (!cleanedMessage) {
+    return "";
+  }
+
+  return (
+    cleanedMessage
+      .charAt(0)
+      .toUpperCase() +
+    cleanedMessage.slice(1)
+  );
+}
+
+function createId(
+  prefix: string,
+) {
   return `${prefix}-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 9)}`;

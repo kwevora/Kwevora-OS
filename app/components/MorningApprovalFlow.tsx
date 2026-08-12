@@ -41,7 +41,7 @@ export default function MorningApprovalFlow() {
           </div>
         </section>
 
-        <KAIActivityLog approved />
+        <KAIActivityLog />
       </section>
     );
   }

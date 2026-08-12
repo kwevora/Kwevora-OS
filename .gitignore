@@ -42,3 +42,13 @@ next-env.d.ts
 
 # local release archives
 *.zip
+
+# OpenNext
+.open-next
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+
+!.env.example
