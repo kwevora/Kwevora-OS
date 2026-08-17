@@ -203,21 +203,37 @@ function repairDirection(
   }
 
   // The validator requires 65-95 spoken words. Repair to the same floor
-  // before validation so KAI cannot repeatedly reject its own corrected script.
+  // while keeping headroom below the ceiling. This prevents a short-script
+  // repair from turning into an overlong script on the same attempt.
   const narrationWordCount = () =>
     words(repairedScenes.map((scene) => clean(scene.narration)).join(" ")).length;
+  const appendWithinBudget = (sceneIndex: number, addition: string) => {
+    const remainingWords = Math.max(0, 90 - narrationWordCount());
+    const safeAddition = words(addition).slice(0, remainingWords).join(" ");
+
+    if (safeAddition) {
+      repairedScenes[sceneIndex].narration =
+        `${clean(repairedScenes[sceneIndex].narration)} ${safeAddition}`.trim();
+    }
+  };
 
   let totalWords = narrationWordCount();
   if (totalWords < 65) {
-    repairedScenes[6].narration = `${clean(repairedScenes[6].narration)} ${input.offerDescription}`.trim();
+    appendWithinBudget(6, input.offerDescription);
     totalWords = narrationWordCount();
   }
   if (totalWords < 65) {
-    repairedScenes[7].narration = `${clean(repairedScenes[7].narration)} See the complete product at the link and decide whether it fits the way you create content.`.trim();
+    appendWithinBudget(
+      7,
+      "See the complete product at the link and decide whether it fits the way you create content.",
+    );
     totalWords = narrationWordCount();
   }
   if (totalWords < 65) {
-    repairedScenes[5].narration = `${clean(repairedScenes[5].narration)} Watch the product in use, notice the specific result, and compare that outcome with the problem shown at the beginning.`.trim();
+    appendWithinBudget(
+      5,
+      "Watch the product in use, notice the specific result, and compare that outcome with the problem shown at the beginning.",
+    );
   }
 
   return {
@@ -244,8 +260,16 @@ function validate(
 
   const narrationWordCount = words(narration).length;
 
-  if (narrationWordCount < 65 || narrationWordCount > 95) {
-    failures.push("The spoken story is too thin.");
+  if (narrationWordCount < 65) {
+    failures.push(
+      `The spoken story is too thin (${narrationWordCount} words; minimum 65).`,
+    );
+  }
+
+  if (narrationWordCount > 95) {
+    failures.push(
+      `The spoken story is too long (${narrationWordCount} words; maximum 95).`,
+    );
   }
 
   if (!narrationIdentifiesProduct(narration, productName)) {
