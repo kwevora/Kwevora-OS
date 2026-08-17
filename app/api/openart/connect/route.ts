@@ -25,8 +25,8 @@ type ClientRegistration = {
   client_secret_expires_at?: number;
 };
 
-function base64Url(value: Buffer) {
-  return value
+function base64Url(value: Uint8Array | ArrayBuffer) {
+  return Buffer.from(value)
     .toString("base64")
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
@@ -34,7 +34,7 @@ function base64Url(value: Buffer) {
 }
 
 async function createPkce() {
-  const verifier = base64Url(crypto.getRandomValues(new Uint8Array(64) as never));
+  const verifier = base64Url(crypto.getRandomValues(new Uint8Array(64)));
   const digest = await crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode(verifier),
