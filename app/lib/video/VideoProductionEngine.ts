@@ -125,7 +125,7 @@ function createProductFirstFallback(
     ? new Set([3, 5])
     : productAssetUrls.length <= 3
       ? new Set([2, 4, 6])
-      : new Set([1, 2, 3, 4, 5, 6]);
+      : new Set([1, 2, 3, 4, 5]);
   const productMovements: VideoScene["cameraMovement"][] = [
     "slow-push-in",
     "pan-left",
