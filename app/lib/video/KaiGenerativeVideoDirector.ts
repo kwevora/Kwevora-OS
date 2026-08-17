@@ -107,6 +107,7 @@ function visibleCopy(value: unknown): string {
 
 function spokenProductName(productName: string): string {
   return productName
+    .replace(/\bKWEVORA\b/g, "Kwevora")
     .replace(/\s+by\s+@?[a-z0-9_.-]+.*$/i, "")
     .replace(/\s+/g, " ")
     .trim();
