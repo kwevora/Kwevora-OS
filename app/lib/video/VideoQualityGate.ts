@@ -4,15 +4,16 @@ const INTERNAL_COPY = [/\bproduct\s*:/i, /\baudience\s*:/i, /\bcreative directio
 const REJECTED_TEMPLATE_COPY = [/stop juggling your content/i, /scattered ideas kill consistency/i, /content shouldn't feel this hard/i, /one planner.*every campaign/i, /organizes it all/i, /plan.*schedule.*publish/i, /create with clarity/i, /get the planner/i];
 const wordCount = (value?: string) => value?.trim().split(/\s+/).filter(Boolean).length ?? 0;
 
-export function enforcePremiumVideoQuality(input: { scenes: VideoScene[]; music?: VideoAudioTrack }) {
+export function enforcePremiumVideoQuality(input: { scenes: VideoScene[]; music?: VideoAudioTrack; narrationDurationSeconds?: number }) {
   const failures: string[] = [];
   if (input.scenes.length < 4) failures.push("The campaign needs at least four directed scenes.");
   const productProofScenes = input.scenes.filter((scene) => scene.metadata?.productProof === true);
   if (productProofScenes.length < 3) failures.push("The campaign must show the real product in at least three scenes.");
   input.scenes.forEach((scene, index) => {
     const isProductProof = scene.metadata?.productProof === true;
+    const hasGeneratedMotion = scene.metadata?.motionGenerated === true;
     if (isProductProof && !scene.videoUrl && !scene.imageUrl) failures.push(`Scene ${index + 1} has no uploaded product proof.`);
-    if (!isProductProof && !scene.videoUrl) failures.push(`Scene ${index + 1} has no genuine motion footage.`);
+    if (!isProductProof && !scene.videoUrl && !hasGeneratedMotion) failures.push(`Scene ${index + 1} has no genuine motion footage.`);
     if (!scene.voiceAudioUrl) failures.push(`Scene ${index + 1} has no Chatterbox narration.`);
     if (!isProductProof && scene.imageUrl) failures.push(`Scene ${index + 1} still contains a slideshow fallback.`);
     if (wordCount(scene.text) > 7) failures.push(`Scene ${index + 1} headline exceeds seven words.`);
@@ -30,5 +31,13 @@ export function enforcePremiumVideoQuality(input: { scenes: VideoScene[]; music?
   const narrationUrls = new Set(input.scenes.map((scene) => scene.voiceAudioUrl).filter(Boolean));
   if (narrationUrls.size !== 1) failures.push("The finished cut does not contain one continuous narration master.");
   if (!input.music?.url.includes("-kai-original.wav")) failures.push("The soundtrack was not created uniquely for this campaign.");
+  const visualKeys = new Set(input.scenes.map((scene) =>
+    scene.videoUrl || scene.imageUrl || (scene.metadata?.motionGenerated === true ? `generated:${scene.id}` : "")
+  ).filter(Boolean));
+  if (visualKeys.size < Math.min(4, input.scenes.length)) failures.push("The campaign does not contain enough visual variety.");
+  if (input.narrationDurationSeconds) {
+    const videoDurationSeconds = input.scenes.reduce((total, scene) => total + scene.durationInFrames / 30, 0);
+    if (videoDurationSeconds < input.narrationDurationSeconds + 0.75) failures.push("The video ends before the narration is complete.");
+  }
   if (failures.length > 0) throw new Error(`Premium quality gate stopped this render: ${failures.join(" ")}`);
 }

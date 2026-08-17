@@ -118,14 +118,44 @@ function createProductFirstFallback(
   scenes: VideoScene[],
   productAssetUrls: string[],
 ): VideoScene[] {
+  const productProofIndexes = new Set([2, 4, 6]);
+  const productMovements: VideoScene["cameraMovement"][] = [
+    "slow-push-in",
+    "pan-left",
+    "pan-right",
+  ];
+  let productSceneNumber = 0;
+
   return scenes.map((scene, index) => {
-    if (scene.metadata?.productProof === true) return scene;
+    const useProductProof = productProofIndexes.has(index);
+
+    if (!useProductProof) {
+      return {
+        ...scene,
+        imageUrl: undefined,
+        videoUrl: undefined,
+        cameraMovement: index % 2 === 0 ? "slow-push-in" : "slow-pull-out",
+        metadata: {
+          ...scene.metadata,
+          visualSource: "generated-kinetic-context",
+          productProof: false,
+          motionProvider: "KAI kinetic context",
+          motionGenerated: true,
+          motionSelectedByKai: true,
+          footageQuery: `original branded motion context ${index + 1}`,
+        },
+      };
+    }
+
     const assetUrl = productAssetUrls[index % productAssetUrls.length];
     const assetIsVideo = Boolean(assetUrl?.match(/\.(mp4|webm|mov)(?:\?.*)?$/i));
+    const cameraMovement = productMovements[productSceneNumber % productMovements.length];
+    productSceneNumber += 1;
     return {
       ...scene,
       imageUrl: assetIsVideo ? undefined : assetUrl,
       videoUrl: assetIsVideo ? assetUrl : undefined,
+      cameraMovement,
       metadata: {
         ...scene.metadata,
         visualSource: "product",
@@ -139,6 +169,32 @@ function createProductFirstFallback(
       },
     };
   });
+}
+
+function fitScenesToNarration(
+  scenes: VideoScene[],
+  narrationDurationSeconds: number,
+): VideoScene[] {
+  const currentFrames = scenes.reduce(
+    (total, scene) => total + Math.max(1, scene.durationInFrames),
+    0,
+  );
+  const requiredFrames = Math.ceil((narrationDurationSeconds + 1.25) * 30);
+
+  if (currentFrames >= requiredFrames) return scenes;
+
+  const scale = requiredFrames / currentFrames;
+  const resized = scenes.map((scene) => ({
+    ...scene,
+    durationInFrames: Math.max(45, Math.ceil(scene.durationInFrames * scale)),
+  }));
+  const resizedTotal = resized.reduce((total, scene) => total + scene.durationInFrames, 0);
+
+  if (resizedTotal < requiredFrames) {
+    resized[resized.length - 1].durationInFrames += requiredFrames - resizedTotal;
+  }
+
+  return resized;
 }
 
 function createDirectorMetadata(
@@ -586,9 +642,12 @@ export async function produceVideo(
       logger(
         "Free context footage is unavailable. KAI switched automatically to a product-first demonstration.",
       );
+      const fallbackScenes = createProductFirstFallback(scenes, productAssetUrls);
       motion = {
-        scenes: createProductFirstFallback(scenes, productAssetUrls),
-        generated: 0,
+        scenes: fallbackScenes,
+        generated: fallbackScenes.filter(
+          (scene) => scene.metadata?.motionGenerated === true,
+        ).length,
         failures: [motionFailure],
       };
     }
@@ -667,9 +726,23 @@ export async function produceVideo(
       creativePortfolio: request.creativePortfolio,
     });
 
+    if (!voiceGeneration.durationSeconds) {
+      throw new Error("KAI could not verify the complete narration duration.");
+    }
+
+    productionPackage = {
+      ...productionPackage,
+      estimatedLengthSeconds: Math.ceil(voiceGeneration.durationSeconds + 1.25),
+      scenes: fitScenesToNarration(
+        productionPackage.scenes,
+        voiceGeneration.durationSeconds,
+      ),
+    };
+
     enforcePremiumVideoQuality({
       scenes: productionPackage.scenes,
       music: productionPackage.music,
+      narrationDurationSeconds: voiceGeneration.durationSeconds,
     });
 
     updateProductionProgress({

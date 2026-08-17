@@ -17,6 +17,7 @@ export type VoiceGenerationServiceResult = {
   voice: VideoVoiceDirection;
   audioUrl?: string;
   outputPath?: string;
+  durationSeconds?: number;
   message: string;
 };
 
@@ -123,6 +124,7 @@ export async function generatePlannedVoice(
     voice: readyVoice,
     audioUrl: result.audioUrl,
     outputPath: result.outputPath,
+    durationSeconds: result.durationSeconds,
     message:
       result.message ||
       "Voice generated successfully.",
