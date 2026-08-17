@@ -24,7 +24,13 @@ export function enforcePremiumVideoQuality(input: { scenes: VideoScene[]; music?
   input.scenes.forEach((scene, index) => {
     const isProductProof = scene.metadata?.productProof === true;
     if (isProductProof && !scene.videoUrl && !scene.imageUrl) failures.push(`Scene ${index + 1} has no uploaded product proof.`);
-    if (!isProductProof && !scene.videoUrl) failures.push(`Scene ${index + 1} has no genuine human-context motion footage.`);
+    const hasDirectedFacelessMotion =
+      Boolean(scene.videoUrl) ||
+      scene.metadata?.motionGenerated === true ||
+      scene.metadata?.motionSelectedByKai === true;
+    if (!isProductProof && !hasDirectedFacelessMotion) {
+      failures.push(`Scene ${index + 1} has no directed faceless motion treatment.`);
+    }
     if (!scene.voiceAudioUrl) failures.push(`Scene ${index + 1} has no Chatterbox narration.`);
     if (!isProductProof && scene.imageUrl) failures.push(`Scene ${index + 1} still contains a slideshow fallback.`);
     if (wordCount(scene.text) > 7) failures.push(`Scene ${index + 1} headline exceeds seven words.`);
