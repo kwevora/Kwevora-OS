@@ -186,6 +186,14 @@ export default function SettingsPage() {
           },
         );
 
+      const contentType = response.headers.get("content-type") ?? "";
+
+      if (!contentType.includes("application/json")) {
+        throw new Error(
+          "KWEVORA received an invalid YouTube status response.",
+        );
+      }
+
       const data =
         (
           await response.json()
@@ -231,13 +239,7 @@ export default function SettingsPage() {
           ? data.channelId
           : "",
       );
-    } catch (
-      error
-    ) {
-      console.error(
-        "YouTube status check failed:",
-        error,
-      );
+    } catch {
 
       setYoutubeConnected(
         false,
