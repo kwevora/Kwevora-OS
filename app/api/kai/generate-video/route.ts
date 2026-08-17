@@ -86,7 +86,11 @@ export async function POST(request: NextRequest) {
       audience: getOptionalText(body.audience),
       destination: getOptionalText(body.destination),
       productAssetUrls: getProductAssetUrls(body.productAssetUrls),
-      openArtAccessToken:\n        body.useOpenArt === true\n          ? request.cookies.get("kwevora_openart_access_token")?.value\n          : undefined,\n      creativeApproach: getCreativeApproach(body.creativeApproach),
+      openArtAccessToken:
+        body.useOpenArt === true
+          ? request.cookies.get("kwevora_openart_access_token")?.value
+          : undefined,
+      creativeApproach: getCreativeApproach(body.creativeApproach),
       minimumQualityScore:
         typeof body.minimumQualityScore === "number"
           ? body.minimumQualityScore
