@@ -141,6 +141,19 @@ function createProductFirstFallback(
     const useProductProof = productProofIndexes.has(index);
 
     if (!useProductProof) {
+      const facelessTreatments = [
+        "scattered-content-cards",
+        "deadline-pressure",
+        "idea-overload",
+        "workflow-build",
+        "calendar-organization",
+        "publishing-momentum",
+        "outcome-proof",
+        "link-conversion",
+      ] as const;
+      const visualTreatment =
+        facelessTreatments[index % facelessTreatments.length];
+
       return {
         ...scene,
         imageUrl: undefined,
@@ -148,12 +161,14 @@ function createProductFirstFallback(
         cameraMovement: index % 2 === 0 ? "slow-push-in" : "slow-pull-out",
         metadata: {
           ...scene.metadata,
-          visualSource: "generated-kinetic-context",
+          visualSource: "designed-faceless-motion",
+          visualTreatment,
+          designedFacelessMotion: true,
           productProof: false,
-          motionProvider: "KAI kinetic context",
+          motionProvider: "KAI Remotion faceless ad system",
           motionGenerated: true,
           motionSelectedByKai: true,
-          footageQuery: `original branded motion context ${index + 1}`,
+          footageQuery: `designed faceless motion ${visualTreatment} ${index + 1}`,
         },
       };
     }
