@@ -139,6 +139,18 @@ function narrationIdentifiesProduct(
   return productIdentity.every((word) => narrationSet.has(word));
 }
 
+function requiredProductSceneCount(productAssetCount: number): number {
+  if (productAssetCount <= 1) return 2;
+  if (productAssetCount <= 3) return 3;
+  return 5;
+}
+
+function productSceneIndexes(productAssetCount: number): Set<number> {
+  if (productAssetCount <= 1) return new Set([3, 5]);
+  if (productAssetCount <= 3) return new Set([2, 4, 6]);
+  return new Set([1, 2, 3, 4, 5, 6]);
+}
+
 function repairDirection(
   input: DirectorInput,
   direction: GeneratedDirection,
@@ -149,6 +161,8 @@ function repairDirection(
   const fallbackScenes = input.fallbackConcept.plan.scenes;
   const targetSceneCount = 8;
   const repairedScenes: GeneratedScene[] = [];
+  const requiredProductIndexes = productSceneIndexes(input.productAssetCount);
+  let productSceneNumber = 0;
 
   for (let index = 0; index < targetSceneCount; index += 1) {
     const generated = generatedScenes[index % Math.max(1, generatedScenes.length)] ?? {};
@@ -160,7 +174,7 @@ function repairDirection(
     const purpose = PURPOSES[index];
     // Reference-grade product ads keep the offer on camera through the body
     // of the story. Only the opening hook and closing CTA may use context.
-    const forceProductProof = index >= 1 && index <= 6;
+    const forceProductProof = requiredProductIndexes.has(index);
     const visualSource = forceProductProof || generated.visualSource === "product"
       ? "product"
       : "stock";
@@ -190,7 +204,7 @@ function repairDirection(
       durationSeconds: Number(generated.durationSeconds) || 3.5,
       visualSource,
       productAssetIndex: visualSource === "product"
-        ? index % input.productAssetCount
+        ? productSceneNumber++ % Math.max(1, input.productAssetCount)
         : undefined,
     });
   }
@@ -200,6 +214,11 @@ function repairDirection(
     .join(" ");
   if (!narrationIdentifiesProduct(combinedNarration, input.productName)) {
     repairedScenes[3].narration = `${spokenProductName(input.productName)} gives you ${input.offerDescription}. ${clean(repairedScenes[3].narration)}`;
+  }
+
+  if (!/\b(click|tap)\b.*\blink\b/i.test(clean(repairedScenes[7].narration))) {
+    repairedScenes[7].narration = `Click the link to get ${spokenProductName(input.productName)}.`;
+    repairedScenes[7].onScreenText = "Click the link to get it";
   }
 
   // The validator requires 65-95 spoken words. Repair to the same floor
@@ -311,8 +330,11 @@ function validate(
     (scene) => scene.visualSource === "product",
   );
 
-  if (productScenes.length < 5) {
-    failures.push("KAI must keep the real product on camera for most of the ad.");
+  const requiredProductScenes = requiredProductSceneCount(productAssetCount);
+  if (productScenes.length < requiredProductScenes) {
+    failures.push(
+      `KAI needs ${requiredProductScenes} truthful product scenes for the available product media.`,
+    );
   }
 
   const shotPatterns = new Set(
@@ -321,8 +343,11 @@ function validate(
     ),
   );
 
-  if (shotPatterns.size < 4) {
-    failures.push("The product demonstration needs at least four distinct shots or actions.");
+  const requiredShotPatterns = Math.min(4, requiredProductScenes);
+  if (shotPatterns.size < requiredShotPatterns) {
+    failures.push(
+      `The product demonstration needs at least ${requiredShotPatterns} distinct treatments for the available product media.`,
+    );
   }
 
   for (const scene of productScenes) {
@@ -433,7 +458,7 @@ function applyDirection(
       ),
       callToAction: clean(
         direction.callToAction,
-        `See ${spokenProductName(input.productName)} at the link.`,
+        `Click the link to get ${spokenProductName(input.productName)}.`,
       ),
       scenes,
     },
@@ -445,6 +470,7 @@ function createPrompt(
   correctionFeedback: string,
 ): string {
   const productNameForNarration = spokenProductName(input.productName);
+  const requiredProductScenes = requiredProductSceneCount(input.productAssetCount);
 
   return `
 You are KAI's senior short-form commercial director. Direct one believable 28-35 second vertical social ad that a real creator would stop scrolling to watch.
@@ -465,10 +491,11 @@ Hard rules:
 - Return exactly 8 scenes.
 - Write one continuous natural voiceover of 65-95 words across those 8 scenes.
 - The spoken narration must clearly say the exact product name "${productNameForNarration}" at least once.
+- End with this direct action in natural language: "Click the link to get ${productNameForNarration}."
 - Do not include the creator username or seller attribution when speaking the product name.
 - Make the product mechanism tangible: show what is inside, how it is used, and the concrete before/after.
 - Use stock footage only for human context. Mark those scenes visualSource "stock" and give them a literal portrait-footage query.
-- Keep the product visible through the body of the ad: mark at least FIVE reveal, walkthrough, close-up, or proof scenes visualSource "product". Those scenes will use real uploaded product screenshots or screen recordings. Narration must describe the exact feature the viewer should see.
+- Use exactly ${requiredProductScenes} truthful reveal, walkthrough, close-up, or proof scenes marked visualSource "product". Use the remaining scenes for varied human context from real portrait footage. Never repeat one product still through most of the ad.
 - Direct those product moments as a demonstration sequence, not repeated pictures: overview, interaction, detail, proof, result. Vary cameraShot, cameraMovement, and the literal visual action.
 - Match proven TikTok pacing: a meaningful visual change every 2.5-4.5 seconds, hard cuts for energy, and no scene longer than 5 seconds.
 - For every product scene, set productAssetIndex to the uploaded file number that best supports that exact spoken line.
