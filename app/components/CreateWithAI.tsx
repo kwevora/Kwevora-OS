@@ -84,6 +84,7 @@ export default function CreateWithAI() {
   const [productFiles, setProductFiles] = useState<File[]>([]);
   const [creativeApproach, setCreativeApproach] =
     useState<CreativeApproach>("product_demonstration");
+  const [useOpenArt, setUseOpenArt] = useState(false);
 
   const [status, setStatus] =
     useState<GenerationStatus>("idle");
@@ -212,6 +213,7 @@ export default function CreateWithAI() {
             durationSeconds: 30,
             creationMode:
               "kai-directed-product-proof-video",
+            useOpenArt,
             sendToReviewQueue: true,
           }),
         },
@@ -337,6 +339,24 @@ export default function CreateWithAI() {
           ) : null}
         </label>
       </div>
+
+      <label className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-300/20 bg-amber-500/10 p-4">
+        <input
+          type="checkbox"
+          checked={useOpenArt}
+          onChange={(event) => setUseOpenArt(event.target.checked)}
+          disabled={isWorking}
+          className="mt-1 h-4 w-4 accent-amber-300"
+        />
+        <span>
+          <span className="block font-black text-amber-200">
+            Optional premium OpenArt hook
+          </span>
+          <span className="mt-1 block text-sm leading-6 text-gray-300">
+            Off by default. When enabled, KAI generates one premium OpenArt scene and uses your OpenArt credits. Free footage and KAI motion are used for the rest.
+          </span>
+        </span>
+      </label>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
         <button
