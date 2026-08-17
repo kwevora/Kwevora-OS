@@ -593,10 +593,12 @@ export default function SceneRenderer({
   const sceneImageUrl = resolveSceneImageUrl(scene.imageUrl);
   const sceneVideoUrl = resolveSceneVideoUrl(scene.videoUrl);
   const isProductProof = scene.metadata?.productProof === true;
-  const productClipStartFrame =
-    isProductProof && typeof scene.metadata?.productClipStartFrame === "number"
-      ? scene.metadata.productClipStartFrame
-      : undefined;
+  const mediaClipStartFrame =
+    typeof scene.metadata?.mediaClipStartFrame === "number"
+      ? scene.metadata.mediaClipStartFrame
+      : isProductProof && typeof scene.metadata?.productClipStartFrame === "number"
+        ? scene.metadata.productClipStartFrame
+        : undefined;
   const productReveal = spring({
     fps,
     frame: localFrame,
@@ -663,7 +665,7 @@ export default function SceneRenderer({
           <OffthreadVideo
             src={sceneVideoUrl}
             muted={scene.metadata?.motionAudioEnabled !== true}
-            startFrom={productClipStartFrame}
+            startFrom={mediaClipStartFrame}
             pauseWhenBuffering
             style={{
               width: "100%",

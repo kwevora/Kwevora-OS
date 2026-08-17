@@ -75,6 +75,12 @@ export async function generateMotionScenes(input: { videoId: string; productName
 
   for (let index = 0; index < input.scenes.length; index += 1) {
     const scene = input.scenes[index];
+    if (scene.metadata?.presenterGenerated === true && scene.videoUrl) {
+      input.logger?.(`Using KAI's generated presenter for scene ${index + 1}/${input.scenes.length}.`);
+      completed.push(scene);
+      generated += 1;
+      continue;
+    }
     if (scene.metadata?.productProof === true) {
       input.logger?.(`Using the uploaded product itself for scene ${index + 1}/${input.scenes.length}.`);
       completed.push(scene);

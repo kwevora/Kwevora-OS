@@ -130,6 +130,10 @@ function createProductFirstFallback(
   let productSceneNumber = 0;
 
   return scenes.map((scene, index) => {
+    if (scene.metadata?.presenterGenerated === true && scene.videoUrl) {
+      return scene;
+    }
+
     const useProductProof = productProofIndexes.has(index);
 
     if (!useProductProof) {
@@ -629,6 +633,37 @@ export async function produceVideo(
           status: "planned" as const,
         };
 
+    const presenterSceneIndexes = new Set([0, scenes.length - 1]);
+    const scenesForMotion = presenterGeneration.success && presenterGeneration.videoUrl
+      ? scenes.map((scene, index) => {
+          if (!presenterSceneIndexes.has(index)) return scene;
+
+          const clipStartFrame = scenes
+            .slice(0, index)
+            .reduce((total, previous) => total + previous.durationInFrames, 0);
+
+          return {
+            ...scene,
+            imageUrl: undefined,
+            videoUrl: presenterGeneration.videoUrl,
+            presenterVideoUrl: presenterGeneration.videoUrl,
+            metadata: {
+              ...scene.metadata,
+              visualSource: "ai-presenter",
+              productProof: false,
+              presenterGenerated: true,
+              motionGenerated: true,
+              motionProvider: "SadTalker + MuseTalk 1.5",
+              motionSelectedByKai: true,
+              mediaClipStartFrame: clipStartFrame,
+              footageQuery: index === 0
+                ? "AI presenter delivers the immediate hook"
+                : "AI presenter delivers the direct call to action",
+            },
+          };
+        })
+      : scenes;
+
     logger("KAI is selecting fresh, commercially usable vertical motion footage.");
     let motion;
     try {
@@ -637,7 +672,7 @@ export async function produceVideo(
         productName,
         audience,
         creativeApproach: request.creativeApproach ?? "product_demonstration",
-        scenes,
+        scenes: scenesForMotion,
         logger,
       });
     } catch (error) {
@@ -645,7 +680,7 @@ export async function produceVideo(
       logger(
         "Free context footage is unavailable. KAI switched automatically to a product-first demonstration.",
       );
-      const fallbackScenes = createProductFirstFallback(scenes, productAssetUrls);
+      const fallbackScenes = createProductFirstFallback(scenesForMotion, productAssetUrls);
       motion = {
         scenes: fallbackScenes,
         generated: fallbackScenes.filter(
