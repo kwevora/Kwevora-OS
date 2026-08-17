@@ -8,7 +8,8 @@ export type PublishingPlatform =
 export type PublishingMedia = {
   source:
     | "recording"
-    | "upload";
+    | "upload"
+    | "generated";
 
   fileName: string;
 

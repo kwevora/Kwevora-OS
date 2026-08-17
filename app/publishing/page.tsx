@@ -14,7 +14,8 @@ type VideoPlan = {
 type MediaFile = {
   source:
     | "recording"
-    | "upload";
+    | "upload"
+    | "generated";
 
   fileName: string;
 
@@ -287,6 +288,15 @@ export default function PublishingPage() {
         "This package does not have a finished video file yet. Upload or record a video before sending it to YouTube.",
       );
 
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Send "${item.title || "this approved video"}" to YouTube as PRIVATE? It will not be publicly visible until you change it on YouTube.`,
+    );
+
+    if (!confirmed) {
+      setMessage("YouTube upload canceled. Nothing was published.");
       return;
     }
 
@@ -1275,7 +1285,7 @@ export default function PublishingPage() {
                           {isWorking
                             ? "Uploading..."
                             : item.media
-                              ? "Send to YouTube"
+                              ? "Upload Privately to YouTube"
                               : "Video File Required"}
                         </button>
 

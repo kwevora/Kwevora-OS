@@ -51,6 +51,13 @@ type YouTubeVideoResponse = {
   };
 };
 
+type YouTubeAnalyticsResponse = {
+  columnHeaders?: Array<{ name?: string; dataType?: string }>;
+  rows?: Array<Array<string | number>>;
+  errors?: Array<{ message?: string }>;
+  error?: { message?: string };
+};
+
 function cleanString(
   value: unknown,
 ): string {
@@ -221,6 +228,47 @@ async function loadVideoResults(
   }
 
   return data;
+}
+
+function dateOnly(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
+async function loadWatchResults({
+  videoId,
+  publishedAt,
+  accessToken,
+}: {
+  videoId: string;
+  publishedAt: string;
+  accessToken: string;
+}): Promise<Record<string, number> | null> {
+  const end = new Date();
+  const fallbackStart = new Date(end);
+  fallbackStart.setUTCDate(fallbackStart.getUTCDate() - 28);
+  const parsedPublished = new Date(publishedAt);
+  const start = Number.isFinite(parsedPublished.getTime()) ? parsedPublished : fallbackStart;
+  const url = new URL("https://youtubeanalytics.googleapis.com/v2/reports");
+  url.searchParams.set("ids", "channel==MINE");
+  url.searchParams.set("startDate", dateOnly(start));
+  url.searchParams.set("endDate", dateOnly(end));
+  url.searchParams.set(
+    "metrics",
+    "estimatedMinutesWatched,averageViewDuration,averageViewPercentage,shares",
+  );
+  url.searchParams.set("filters", `video==${videoId}`);
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+  const data = (await response.json()) as YouTubeAnalyticsResponse;
+  if (!response.ok || !data.rows?.[0] || !data.columnHeaders) return null;
+  return Object.fromEntries(data.columnHeaders.map((header, index) => [
+    cleanString(header.name),
+    cleanNumber(data.rows?.[0]?.[index]),
+  ]));
 }
 
 export async function GET(
@@ -401,6 +449,23 @@ export async function GET(
           )
         : 0;
 
+    const watchResults = await loadWatchResults({
+      videoId: video.id || videoId,
+      publishedAt: video.snippet?.publishedAt || "",
+      accessToken,
+    }).catch(() => null);
+
+    const verifiedMetrics = {
+      views,
+      watchTimeMinutes: watchResults?.estimatedMinutesWatched ?? null,
+      averageViewDurationSeconds: watchResults?.averageViewDuration ?? null,
+      averageViewPercentage: watchResults?.averageViewPercentage ?? null,
+      likes,
+      comments,
+      shares: watchResults?.shares ?? null,
+      engagementRate,
+    };
+
     const response =
       NextResponse.json({
         success:
@@ -449,7 +514,26 @@ export async function GET(
           engagement,
 
           engagementRate,
+
+          watchTimeMinutes:
+            verifiedMetrics.watchTimeMinutes,
+
+          averageViewDurationSeconds:
+            verifiedMetrics.averageViewDurationSeconds,
+
+          averageViewPercentage:
+            verifiedMetrics.averageViewPercentage,
+
+          shares:
+            verifiedMetrics.shares,
         },
+
+        verifiedMetrics,
+
+        missingMetrics:
+          Object.entries(verifiedMetrics)
+            .filter(([, value]) => value === null)
+            .map(([name]) => name),
 
         outcomeMetrics: [
           {
@@ -495,6 +579,30 @@ export async function GET(
             higherIsBetter:
               true,
           },
+
+          ...(verifiedMetrics.watchTimeMinutes === null ? [] : [{
+            name: "YouTube Watch Time Minutes",
+            actual: verifiedMetrics.watchTimeMinutes,
+            higherIsBetter: true,
+          }]),
+
+          ...(verifiedMetrics.averageViewDurationSeconds === null ? [] : [{
+            name: "YouTube Average View Duration Seconds",
+            actual: verifiedMetrics.averageViewDurationSeconds,
+            higherIsBetter: true,
+          }]),
+
+          ...(verifiedMetrics.averageViewPercentage === null ? [] : [{
+            name: "YouTube Average View Percentage",
+            actual: verifiedMetrics.averageViewPercentage,
+            higherIsBetter: true,
+          }]),
+
+          ...(verifiedMetrics.shares === null ? [] : [{
+            name: "YouTube Shares",
+            actual: verifiedMetrics.shares,
+            higherIsBetter: true,
+          }]),
         ],
       });
 

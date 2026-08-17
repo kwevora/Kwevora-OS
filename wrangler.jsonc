@@ -19,6 +19,13 @@
   "images": {
     "binding": "IMAGES"
   },
+  "d1_databases": [
+    {
+      "binding": "kwevora_db",
+      "database_name": "kwevora-db",
+      "database_id": "d135a45c-4b91-40c7-932b-cb38bc629a1f"
+    }
+  ],
   "observability": {
     "enabled": true
   }

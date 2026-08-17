@@ -1,255 +1,116 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
-import {
-  defaultPlatformConnections,
-  type PlatformConnection,
-  type PlatformConnectionStatus,
-} from "../core/runtime/platformConnections";
 
-const STORAGE_KEY = "kwevora-platform-connections";
+type PlatformReadiness = {
+  platform: "youtube" | "tiktok" | "instagram" | "facebook";
+  label: string;
+  configured: boolean;
+  connected: boolean;
+  executorAvailable: boolean;
+  accountName: string;
+  state: "ready" | "needs_connection" | "needs_app_setup" | "waiting_executor";
+  requirements: Array<{ label: string; satisfied: boolean; reason: string }>;
+  nextAction: string;
+};
 
-function isValidConnection(value: unknown): value is PlatformConnection {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
+type ControlCenterResponse = {
+  success: boolean;
+  message?: string;
+  controlCenter?: {
+    ready: number;
+    connected: number;
+    needsSetup: number;
+    waitingExecutor: number;
+    platforms: PlatformReadiness[];
+  };
+  publishingJobs?: {
+    platforms: Array<{ platform: string; total: number; counts: Record<string, number> }>;
+  };
+};
 
-  const connection = value as Partial<PlatformConnection>;
-
-  return (
-    typeof connection.platform === "string" &&
-    typeof connection.label === "string" &&
-    typeof connection.status === "string" &&
-    typeof connection.username === "string" &&
-    typeof connection.profileUrl === "string" &&
-    typeof connection.notes === "string"
-  );
-}
-
-function loadConnections(): PlatformConnection[] {
-  const saved = window.localStorage.getItem(STORAGE_KEY);
-
-  if (!saved) {
-    return defaultPlatformConnections;
-  }
-
-  try {
-    const parsed: unknown = JSON.parse(saved);
-
-    if (
-      !Array.isArray(parsed) ||
-      parsed.length === 0 ||
-      !parsed.every(isValidConnection)
-    ) {
-      window.localStorage.removeItem(STORAGE_KEY);
-      return defaultPlatformConnections;
-    }
-
-    return parsed;
-  } catch {
-    window.localStorage.removeItem(STORAGE_KEY);
-    return defaultPlatformConnections;
-  }
-}
+const icons: Record<string, string> = {
+  youtube: "â–¶ï¸", tiktok: "ðŸŽµ", instagram: "ðŸ“¸", facebook: "ðŸ“˜",
+};
 
 export default function PlatformConnections() {
-  const [connections, setConnections] = useState<PlatformConnection[]>([]);
+  const [data, setData] = useState<ControlCenterResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const loadedConnections = loadConnections();
-
-    setConnections(loadedConnections);
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(loadedConnections)
-    );
+    let cancelled = false;
+    void fetch("/api/platforms/status", { cache: "no-store" })
+      .then(async (response) => {
+        const result = await response.json() as ControlCenterResponse;
+        if (!response.ok || !result.success) throw new Error(result.message ?? "KAI could not check the publishing platforms.");
+        if (!cancelled) setData(result);
+      })
+      .catch((reason) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "KAI could not check the publishing platforms.");
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
-  function saveConnections(next: PlatformConnection[]) {
-    setConnections(next);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  }
-
-  function updateConnection(
-    platform: PlatformConnection["platform"],
-    field: "username" | "profileUrl" | "notes",
-    value: string
-  ) {
-    saveConnections(
-      connections.map((connection) =>
-        connection.platform === platform
-          ? {
-              ...connection,
-              [field]: value,
-            }
-          : connection
-      )
-    );
-  }
-
-  function updateStatus(
-    platform: PlatformConnection["platform"],
-    status: PlatformConnectionStatus
-  ) {
-    saveConnections(
-      connections.map((connection) =>
-        connection.platform === platform
-          ? {
-              ...connection,
-              status,
-            }
-          : connection
-      )
-    );
-  }
-
-  if (connections.length === 0) {
-    return null;
-  }
+  if (loading) return <section className="rounded-3xl border border-blue-500/30 bg-blue-950/10 p-8 text-gray-300">KAI is verifying the real platform controls...</section>;
+  if (error || !data?.controlCenter) return <section className="rounded-3xl border border-red-500/30 bg-red-500/10 p-8 text-red-200">{error || "Platform status is unavailable."}</section>;
 
   return (
     <section className="rounded-3xl border border-blue-500/30 bg-blue-950/10 p-8">
-      <p className="text-sm font-bold tracking-[0.35em] text-blue-300">
-        PLATFORM CONNECTIONS
-      </p>
-
-      <h2 className="mt-4 text-4xl font-black">
-        Connect the accounts KAI will publish to.
-      </h2>
-
-      <p className="mt-4 max-w-4xl text-gray-300">
-        KAI can prepare every package for publishing. Direct account
-        connections use each platform&apos;s official publishing tools.
-      </p>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-sm font-bold tracking-[0.35em] text-blue-300">MULTI-PLATFORM CONTROL CENTER</p>
+          <h2 className="mt-4 text-4xl font-black">One approval. Independent platform jobs.</h2>
+          <p className="mt-4 max-w-4xl text-gray-300">These statuses come from real server credentials, account authorization, and installed publishers. There are no manual â€œconnectedâ€ switches.</p>
+        </div>
+        <div className="rounded-full border border-blue-300/20 px-4 py-2 text-sm font-black text-blue-200">{data.controlCenter.ready} ready Â· {data.controlCenter.connected} connected</div>
+      </div>
 
       <div className="mt-8 grid gap-5 lg:grid-cols-2">
-        {connections.map((connection, index) => (
-          <article
-            key={`${connection.platform}-${index}`}
-            className="rounded-2xl border border-white/10 bg-black/30 p-6"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className="text-2xl font-black">{connection.label}</h3>
+        {data.controlCenter.platforms.map((platform) => {
+          const jobs = data.publishingJobs?.platforms?.find((item) => item.platform === platform.platform);
+          return (
+            <article key={platform.platform} className="rounded-2xl border border-white/10 bg-black/30 p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/5 text-2xl">{icons[platform.platform]}</div>
+                  <div><h3 className="text-2xl font-black">{platform.label}</h3><p className="mt-1 text-sm text-gray-400">{platform.accountName || platform.nextAction}</p></div>
+                </div>
+                <Status state={platform.state} />
+              </div>
 
-              <StatusBadge status={connection.status} />
-            </div>
+              <div className="mt-5 grid gap-2">
+                {platform.requirements.map((requirement) => (
+                  <div key={requirement.label} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                    <p className={requirement.satisfied ? "font-bold text-green-300" : "font-bold text-amber-300"}>{requirement.satisfied ? "âœ“" : "â€¢"} {requirement.label}</p>
+                    {!requirement.satisfied && <p className="mt-1 text-xs text-gray-400">{requirement.reason}</p>}
+                  </div>
+                ))}
+              </div>
 
-            <div className="mt-5 grid gap-4">
-              <label>
-                <span className="text-sm font-bold tracking-[0.2em] text-gray-400">
-                  USERNAME / CHANNEL NAME
-                </span>
+              <div className="mt-5 flex flex-wrap gap-2 text-xs font-bold text-gray-300">
+                <span className="rounded-full bg-white/5 px-3 py-2">{jobs?.counts.scheduled ?? 0} scheduled</span>
+                <span className="rounded-full bg-white/5 px-3 py-2">{jobs?.counts.published ?? 0} published</span>
+                <span className="rounded-full bg-white/5 px-3 py-2">{jobs?.counts.waiting_executor ?? 0} waiting executor</span>
+                <span className="rounded-full bg-white/5 px-3 py-2">{jobs?.counts.blocked ?? 0} blocked</span>
+              </div>
 
-                <input
-                  value={connection.username}
-                  onChange={(event) =>
-                    updateConnection(
-                      connection.platform,
-                      "username",
-                      event.target.value
-                    )
-                  }
-                  placeholder={`Enter your ${connection.label} name`}
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-white outline-none focus:border-blue-400"
-                />
-              </label>
-
-              <label>
-                <span className="text-sm font-bold tracking-[0.2em] text-gray-400">
-                  PROFILE URL
-                </span>
-
-                <input
-                  value={connection.profileUrl}
-                  onChange={(event) =>
-                    updateConnection(
-                      connection.platform,
-                      "profileUrl",
-                      event.target.value
-                    )
-                  }
-                  placeholder={`Paste your ${connection.label} profile link`}
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-white outline-none focus:border-blue-400"
-                />
-              </label>
-
-              <label>
-                <span className="text-sm font-bold tracking-[0.2em] text-gray-400">
-                  NOTES
-                </span>
-
-                <textarea
-                  value={connection.notes}
-                  onChange={(event) =>
-                    updateConnection(
-                      connection.platform,
-                      "notes",
-                      event.target.value
-                    )
-                  }
-                  className="mt-2 min-h-28 w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-white outline-none focus:border-blue-400"
-                />
-              </label>
-            </div>
-
-            <div className="mt-5 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() =>
-                  updateStatus(connection.platform, "manual_ready")
-                }
-                className="rounded-xl bg-yellow-600 px-4 py-3 font-black transition hover:bg-yellow-500"
-              >
-                Mark Manual Ready
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  updateStatus(connection.platform, "connected")
-                }
-                className="rounded-xl bg-green-600 px-4 py-3 font-black transition hover:bg-green-500"
-              >
-                Mark Connected
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  updateStatus(connection.platform, "not_connected")
-                }
-                className="rounded-xl bg-white/10 px-4 py-3 font-black transition hover:bg-white/20"
-              >
-                Disconnect
-              </button>
-            </div>
-          </article>
-        ))}
+              {platform.platform === "youtube" && !platform.connected && platform.configured && <button type="button" onClick={() => { window.location.href = "/api/youtube/connect"; }} className="mt-5 w-full rounded-xl bg-blue-500 px-5 py-3 font-black text-white hover:bg-blue-400">Connect YouTube</button>}
+              {platform.platform === "tiktok" && !platform.connected && platform.configured && <button type="button" onClick={() => { window.location.href = "/api/tiktok/connect"; }} className="mt-5 w-full rounded-xl bg-blue-500 px-5 py-3 font-black text-white hover:bg-blue-400">Connect TikTok</button>}
+              {(platform.platform === "instagram" || platform.platform === "facebook") && !platform.connected && platform.configured && <button type="button" onClick={() => { window.location.href = "/api/meta/connect"; }} className="mt-5 w-full rounded-xl bg-blue-500 px-5 py-3 font-black text-white hover:bg-blue-400">Connect Meta Accounts</button>}
+            </article>
+          );
+        })}
       </div>
     </section>
   );
 }
 
-function StatusBadge({ status }: { status: PlatformConnectionStatus }) {
-  const label =
-    status === "connected"
-      ? "Connected"
-      : status === "manual_ready"
-        ? "Manual Ready"
-        : "Not Connected";
-
-  const className =
-    status === "connected"
-      ? "bg-green-600/20 text-green-300"
-      : status === "manual_ready"
-        ? "bg-yellow-600/20 text-yellow-300"
-        : "bg-white/10 text-gray-300";
-
-  return (
-    <span
-      className={`rounded-full px-4 py-2 text-sm font-bold uppercase ${className}`}
-    >
-      {label}
-    </span>
-  );
+function Status({ state }: { state: PlatformReadiness["state"] }) {
+  const label = state === "ready" ? "Ready" : state === "needs_app_setup" ? "Needs app setup" : state === "needs_connection" ? "Needs connection" : "Waiting executor";
+  const tone = state === "ready" ? "border-green-400/30 bg-green-400/10 text-green-200" : "border-amber-400/30 bg-amber-400/10 text-amber-200";
+  return <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-black ${tone}`}>{label}</span>;
 }
+
+

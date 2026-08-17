@@ -3,6 +3,7 @@ import {
   AbsoluteFill,
   Easing,
   Img,
+  OffthreadVideo,
   interpolate,
   spring,
   staticFile,
@@ -72,6 +73,8 @@ function resolveSceneImageUrl(imageUrl?: string): string | null {
 
   return staticFile(publicPath);
 }
+
+const resolveSceneVideoUrl = resolveSceneImageUrl;
 
 function getCameraTransform({
   movement,
@@ -502,7 +505,6 @@ function getAtmosphere(scene: VideoScene) {
 
 export default function SceneRenderer({
   scene,
-  title,
   brand,
   localFrame,
   sceneDuration,
@@ -548,23 +550,6 @@ export default function SceneRenderer({
     clamp,
   );
 
-  const titleOpacity = interpolate(
-    localFrame,
-    [5, 22],
-    [0, 0.82],
-    clamp,
-  );
-
-  const titleY = interpolate(
-    localFrame,
-    [0, 25],
-    [25, 0],
-    {
-      ...clamp,
-      easing: Easing.out(Easing.cubic),
-    },
-  );
-
   const progress = interpolate(
     localFrame,
     [0, sceneDuration],
@@ -605,14 +590,18 @@ export default function SceneRenderer({
     clamp,
   );
 
-  const supportingTextOpacity = interpolate(
-    localFrame,
-    [18, 34],
-    [0, 0.78],
-    clamp,
-  );
-
   const sceneImageUrl = resolveSceneImageUrl(scene.imageUrl);
+  const sceneVideoUrl = resolveSceneVideoUrl(scene.videoUrl);
+  const isProductProof = scene.metadata?.productProof === true;
+  const productClipStartFrame =
+    isProductProof && typeof scene.metadata?.productClipStartFrame === "number"
+      ? scene.metadata.productClipStartFrame
+      : undefined;
+  const productReveal = spring({
+    fps,
+    frame: localFrame,
+    config: { damping: 18, stiffness: 82, mass: 0.9 },
+  });
 
   const flashOpacity = normalizeValue(
     scene.transition,
@@ -653,18 +642,59 @@ export default function SceneRenderer({
         }}
       />
 
-      {sceneImageUrl ? (
+      {sceneVideoUrl ? (
         <AbsoluteFill
           style={{
-            transform: `
-              translate3d(
-                ${camera.translateX}px,
-                ${camera.translateY}px,
-                0
-              )
-              scale(${camera.scale})
-              rotate(${camera.rotate}deg)
-            `,
+            opacity: sceneOpacity,
+            transform: transitionTransform,
+            overflow: "hidden",
+            ...(isProductProof
+              ? {
+                  inset: "9% 6% 18%",
+                  borderRadius: 34,
+                  border: "2px solid rgba(255,255,255,0.28)",
+                  boxShadow: "0 28px 90px rgba(0,0,0,0.72), 0 0 42px rgba(67,232,255,0.16)",
+                  backgroundColor: "rgba(5,8,14,0.94)",
+                  transform: `translateY(${interpolate(productReveal, [0, 1], [90, 0], clamp)}px) scale(${interpolate(productReveal, [0, 1], [0.88, 1], clamp)})`,
+                }
+              : {}),
+          }}
+        >
+          <OffthreadVideo
+            src={sceneVideoUrl}
+            muted={scene.metadata?.motionAudioEnabled !== true}
+            startFrom={productClipStartFrame}
+            pauseWhenBuffering
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: isProductProof ? "contain" : "cover",
+            }}
+          />
+          {isProductProof ? (
+            <div style={{ position: "absolute", top: 18, left: 22, display: "flex", gap: 10 }}>
+              {["#ff6259", "#ffbd2e", "#28c840"].map((color) => (
+                <div key={color} style={{ width: 15, height: 15, borderRadius: "50%", backgroundColor: color }} />
+              ))}
+            </div>
+          ) : null}
+        </AbsoluteFill>
+      ) : sceneImageUrl ? (
+        <AbsoluteFill
+          style={{
+            ...(isProductProof
+              ? {
+                  inset: "9% 6% 18%",
+                  borderRadius: 34,
+                  border: "2px solid rgba(255,255,255,0.28)",
+                  overflow: "hidden",
+                  boxShadow: "0 28px 90px rgba(0,0,0,0.72), 0 0 42px rgba(67,232,255,0.16)",
+                  backgroundColor: "rgba(5,8,14,0.94)",
+                  transform: `translateY(${interpolate(productReveal, [0, 1], [90, 0], clamp)}px) scale(${interpolate(productReveal, [0, 1], [0.88, 1.035], clamp)})`,
+                }
+              : {
+                  transform: `translate3d(${camera.translateX}px, ${camera.translateY}px, 0) scale(${camera.scale}) rotate(${camera.rotate}deg)`,
+                }),
           }}
         >
           <Img
@@ -672,10 +702,17 @@ export default function SceneRenderer({
             style={{
               width: "100%",
               height: "100%",
-              objectFit: "cover",
+              objectFit: isProductProof ? "contain" : "cover",
               objectPosition: "center",
             }}
           />
+          {isProductProof ? (
+            <div style={{ position: "absolute", top: 18, left: 22, display: "flex", gap: 10 }}>
+              {["#ff6259", "#ffbd2e", "#28c840"].map((color) => (
+                <div key={color} style={{ width: 15, height: 15, borderRadius: "50%", backgroundColor: color }} />
+              ))}
+            </div>
+          ) : null}
         </AbsoluteFill>
       ) : null}
 
@@ -729,22 +766,9 @@ export default function SceneRenderer({
             textAlign: textLayout.textAlign,
           }}
         >
-          <div
-            style={{
-              transform: `translateY(${titleY}px)`,
-              opacity: titleOpacity,
-              marginBottom: 34,
-              fontSize: 25,
-              fontWeight: 700,
-              letterSpacing: 5,
-              lineHeight: 1.3,
-              textTransform: "uppercase",
-            }}
-          >
-            {title}
-          </div>
-
-          <div
+          {(["hook", "solution", "call-to-action"].includes(
+            String(scene.metadata?.scenePurpose ?? ""),
+          )) ? <div
             style={{
               transform: `translateY(${textY}px) scale(${textScale})`,
               transformOrigin:
@@ -801,26 +825,7 @@ export default function SceneRenderer({
                 </span>
               );
             })}
-          </div>
-
-          {scene.supportingText ? (
-            <div
-              style={{
-                marginTop: 30,
-                maxWidth: 800,
-                fontSize: 31,
-                fontWeight: 550,
-                lineHeight: 1.42,
-                letterSpacing: 0.2,
-                opacity: supportingTextOpacity,
-                textAlign: textLayout.textAlign,
-                textShadow:
-                  "0 8px 30px rgba(0,0,0,0.7)",
-              }}
-            >
-              {scene.supportingText}
-            </div>
-          ) : null}
+          </div> : null}
         </div>
       </AbsoluteFill>
 

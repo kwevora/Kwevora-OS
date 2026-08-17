@@ -4,6 +4,8 @@ import KaiMissionCard from "@/app/components/KaiMissionCard";
 import TalkToKAI from "@/app/components/TalkToKAI";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import KAIPerformanceCommandCenter from "@/app/components/KAIPerformanceCommandCenter";
+import KAIMorningGrowthCommand from "@/app/components/KAIMorningGrowthCommand";
 
 type ReviewItem = {
   id: string;
@@ -12,6 +14,7 @@ type ReviewItem = {
   caption?: string;
   status?: string;
   platforms?: string[];
+  recommendedPlatforms?: string[];
   createdAt?: string;
   thumbnailIdea?: string;
   media?: {
@@ -84,6 +87,7 @@ export default function Dashboard() {
             status === "review" ||
             status === "ready" ||
             status === "pending" ||
+            status === "needs_review" ||
             status === "awaiting-approval"
           );
         }),
@@ -241,6 +245,10 @@ export default function Dashboard() {
           </div>
         </section>
 
+        <KAIMorningGrowthCommand />
+
+        <KAIPerformanceCommandCenter />
+
         {!everythingApproved && (
           <section className="mt-8">
             <div className="flex items-end justify-between gap-4">
@@ -337,7 +345,9 @@ export default function Dashboard() {
                         <div className="mt-5 flex flex-wrap gap-2">
                           {(item.platforms?.length
                             ? item.platforms
-                            : ["Social Media"]
+                            : item.recommendedPlatforms?.length
+                              ? item.recommendedPlatforms
+                              : ["Social Media"]
                           ).map((platform) => (
                             <span
                               key={platform}

@@ -2,7 +2,6 @@ import { createKaiCreativeBrainPlan } from "../kaiCreativeBrain";
 import { createKaiDailyMission } from "../kaiDailyMission";
 import { directSceneSequence } from "../kaiSceneDirector";
 
-import { generateImagesInQueue } from "./ImageGenerationQueue";
 import {
   markProductionCompleted,
   markProductionFailed,
@@ -18,13 +17,15 @@ import {
   directCinematicScene,
   type CinematicBlueprint,
 } from "./CinematicDirector";
+import { directAdaptiveVideo } from "./AdaptiveVideoDirector";
+import { generateMotionScenes } from "./MotionVideoGenerationService";
+import { generateLocalSoundtrack } from "./LocalSoundtrackService";
+import { enforcePremiumVideoQuality } from "./VideoQualityGate";
+import { directGenerativeVideo } from "./KaiGenerativeVideoDirector";
 
 import type { KaiCreativeScene } from "../kaiCreativeDirector";
 import type { KaiSceneReview } from "../kaiSceneDirector";
-import type {
-  VideoProductionPackage,
-  VideoScene,
-} from "../../remotion/types";
+import type { VideoProductionPackage, VideoScene } from "../../remotion/types";
 import type {
   ProductionError,
   ProductionLogger,
@@ -35,6 +36,15 @@ import type {
 const DEFAULT_OBJECTIVE =
   "Create useful content that builds trust and moves the viewer toward the next step.";
 
+const APPROACH_DIRECTIONS = {
+  emotional_story:
+    "Build an emotionally honest story: recognizable struggle, human turning point, believable hope, then the product as the practical next step. Avoid hype and generic motivation.",
+  problem_solution:
+    "Open with a painful specific problem, make its cost concrete, demonstrate the product's mechanism, and end with one direct action.",
+  product_demonstration:
+    "Show what the buyer receives and how they use it. Make the product tangible, visually specific, and outcome-focused instead of merely inspirational.",
+} as const;
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -43,10 +53,7 @@ function getErrorMessage(error: unknown): string {
   return "KAI could not complete video production.";
 }
 
-function normalizeText(
-  value: string | undefined,
-  fallback = "",
-): string {
+function normalizeText(value: string | undefined, fallback = ""): string {
   const cleaned = value?.trim();
   return cleaned ? cleaned : fallback;
 }
@@ -58,8 +65,7 @@ function normalizeHashtags(value: unknown): string[] {
 
   return value.filter(
     (hashtag): hashtag is string =>
-      typeof hashtag === "string" &&
-      hashtag.trim().length > 0,
+      typeof hashtag === "string" && hashtag.trim().length > 0,
   );
 }
 
@@ -67,8 +73,7 @@ function normalizePlatforms(value: unknown): string[] {
   if (Array.isArray(value)) {
     const platforms = value.filter(
       (platform): platform is string =>
-        typeof platform === "string" &&
-        platform.trim().length > 0,
+        typeof platform === "string" && platform.trim().length > 0,
     );
 
     if (platforms.length > 0) {
@@ -80,26 +85,60 @@ function normalizePlatforms(value: unknown): string[] {
     return [value.trim()];
   }
 
-  return [
-    "TikTok",
-    "Instagram Reels",
-    "YouTube Shorts",
-  ];
+  return ["TikTok", "Instagram Reels", "YouTube Shorts"];
 }
 
-function calculateEstimatedLengthSeconds(
-  scenes: KaiCreativeScene[],
-): number {
+function compactWords(value: string | undefined, maximum: number) {
+  return normalizeText(value)
+    .replace(/\s+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, maximum)
+    .join(" ");
+}
+
+function directedHeadline(scene: KaiCreativeScene) {
+  if (!['hook', 'solution', 'call-to-action'].includes(scene.purpose)) return "";
+  return compactWords(scene.onScreenText, 7);
+}
+
+function calculateEstimatedLengthSeconds(scenes: KaiCreativeScene[]): number {
   return Math.max(
     1,
     Math.round(
       scenes.reduce(
-        (total, scene) =>
-          total + Math.max(0, scene.durationSeconds),
+        (total, scene) => total + Math.max(0, scene.durationSeconds),
         0,
       ),
     ),
   );
+}
+
+function createProductFirstFallback(
+  scenes: VideoScene[],
+  productAssetUrls: string[],
+): VideoScene[] {
+  return scenes.map((scene, index) => {
+    if (scene.metadata?.productProof === true) return scene;
+    const assetUrl = productAssetUrls[index % productAssetUrls.length];
+    const assetIsVideo = Boolean(assetUrl?.match(/\.(mp4|webm|mov)(?:\?.*)?$/i));
+    return {
+      ...scene,
+      imageUrl: assetIsVideo ? undefined : assetUrl,
+      videoUrl: assetIsVideo ? assetUrl : undefined,
+      metadata: {
+        ...scene.metadata,
+        visualSource: "product",
+        productProof: true,
+        productAssetUrl: assetUrl,
+        productAssetIndex: index % productAssetUrls.length,
+        motionProvider: "product-first-fallback",
+        motionGenerated: false,
+        motionSelectedByKai: true,
+        footageQuery: `product walkthrough scene ${index + 1}`,
+      },
+    };
+  });
 }
 
 function createDirectorMetadata(
@@ -125,6 +164,7 @@ function createDirectorMetadata(
 
 function createProductionScenes(input: {
   videoId: string;
+  productName: string;
   creativeScenes: KaiCreativeScene[];
   directedScenes: KaiSceneReview[];
   imageUrlsBySceneId: Map<string, string>;
@@ -139,63 +179,55 @@ function createProductionScenes(input: {
   reasoning: string;
   creativeBrain: Record<string, unknown>;
   cinematicBlueprints: CinematicBlueprint[];
+  productAssetUrls: string[];
 }): VideoScene[] {
   return input.creativeScenes.map((scene, index) => {
     const directedScene = input.directedScenes[index];
     const cinematicBlueprint = input.cinematicBlueprints[index];
     const sceneId = `${input.videoId}-scene-${index + 1}`;
 
-    const directedImagePrompt =
-      directedScene?.blueprint.prompt.imagePrompt;
-    const directedVideoPrompt =
-      directedScene?.blueprint.prompt.videoPrompt;
+    const directedImagePrompt = directedScene?.blueprint.prompt.imagePrompt;
+    const directedVideoPrompt = directedScene?.blueprint.prompt.videoPrompt;
 
-    const imagePrompt = normalizeText(
-      directedImagePrompt,
-      scene.visualPrompt,
-    );
+    const imagePrompt = normalizeText(directedImagePrompt, scene.visualPrompt);
 
-    const visualPrompt = normalizeText(
-      directedVideoPrompt,
-      imagePrompt,
+    const visualPrompt = normalizeText(directedVideoPrompt, imagePrompt);
+    const isProductProof = scene.visualSource === "product";
+    const requestedAssetIndex = Number(scene.productAssetIndex);
+    const productAssetIndex = Number.isInteger(requestedAssetIndex)
+      ? Math.max(0, Math.min(input.productAssetUrls.length - 1, requestedAssetIndex))
+      : index % input.productAssetUrls.length;
+    const productAssetUrl = isProductProof
+      ? input.productAssetUrls[productAssetIndex]
+      : undefined;
+    const productAssetIsVideo = Boolean(
+      productAssetUrl?.match(/\.(mp4|webm|mov)(?:\?.*)?$/i),
     );
 
     return {
       id: sceneId,
-      text: scene.onScreenText,
-      supportingText: scene.supportingText,
+      text: directedHeadline(scene),
+      supportingText: "",
       narration: scene.narration,
-      durationInFrames: Math.max(
-        1,
-        Math.round(scene.durationSeconds * 30),
-      ),
+      durationInFrames: Math.max(1, Math.round(scene.durationSeconds * 30)),
       backgroundColor: "#050505",
       visual: scene.visual,
       visualPrompt,
       imagePrompt,
-      imageUrl: input.imageUrlsBySceneId.get(sceneId),
+      imageUrl: productAssetUrl && !productAssetIsVideo
+        ? productAssetUrl
+        : input.imageUrlsBySceneId.get(sceneId),
+      videoUrl: productAssetIsVideo ? productAssetUrl : undefined,
       bRollKeywords: scene.bRollKeywords,
-      cameraShot:
-        cinematicBlueprint?.cameraShot ??
-        scene.cameraShot,
+      cameraShot: cinematicBlueprint?.cameraShot ?? scene.cameraShot,
       cameraMovement:
-        cinematicBlueprint?.cameraMovement ??
-        scene.cameraMovement,
-      transition:
-        cinematicBlueprint?.transition ??
-        scene.transition,
-      emotion:
-        cinematicBlueprint?.emotion ??
-        scene.emotion,
-      lighting:
-        cinematicBlueprint?.lighting ??
-        scene.lighting,
-      colorMood:
-        cinematicBlueprint?.colorMood ??
-        scene.colorMood,
+        cinematicBlueprint?.cameraMovement ?? scene.cameraMovement,
+      transition: cinematicBlueprint?.transition ?? scene.transition,
+      emotion: cinematicBlueprint?.emotion ?? scene.emotion,
+      lighting: cinematicBlueprint?.lighting ?? scene.lighting,
+      colorMood: cinematicBlueprint?.colorMood ?? scene.colorMood,
       backgroundStyle:
-        cinematicBlueprint?.backgroundStyle ??
-        scene.backgroundStyle,
+        cinematicBlueprint?.backgroundStyle ?? scene.backgroundStyle,
       textPosition: scene.textPosition,
       thumbnailPrompt: input.thumbnailPrompt,
       thumbnailTitle: input.thumbnailTitle,
@@ -208,12 +240,15 @@ function createProductionScenes(input: {
       objective: input.objective,
       reasoning: input.reasoning,
       metadata: {
-        sceneDirector: createDirectorMetadata(
-          directedScene,
-          index + 1,
-        ),
+        scenePurpose: scene.purpose,
+        sceneDirector: createDirectorMetadata(directedScene, index + 1),
         creativeBrain: input.creativeBrain,
         cinematicDirector: cinematicBlueprint,
+        visualSource: isProductProof ? "product" : "stock",
+        productProof: isProductProof,
+        productAssetUrl,
+        productAssetIndex: isProductProof ? productAssetIndex : undefined,
+        productClipStartFrame: isProductProof && productAssetIsVideo ? index * 30 : undefined,
       },
     };
   });
@@ -229,6 +264,21 @@ export async function produceVideo(
 ): Promise<ProductionResult | ProductionError> {
   const videoId = request.videoId.trim();
   const topic = request.topic.trim();
+  const productName = normalizeText(request.productName, "KWEVORA Content Planner");
+  const offerDescription = normalizeText(
+    request.offerDescription,
+    "A customizable Notion content planning system that turns scattered ideas into an organized, repeatable publishing workflow.",
+  );
+  const audience = normalizeText(
+    request.audience,
+    "creators and digital-product sellers who need a simpler way to plan and publish consistent content",
+  );
+  const productAssetUrls = (request.productAssetUrls ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const approachDirection = request.creativeApproach
+    ? APPROACH_DIRECTIONS[request.creativeApproach]
+    : APPROACH_DIRECTIONS.emotional_story;
 
   const logger =
     options.logger ??
@@ -254,8 +304,16 @@ export async function produceVideo(
     };
   }
 
-  let currentStage: ProductionError["stage"] =
-    "planning";
+  if (productAssetUrls.length === 0) {
+    return {
+      success: false,
+      videoId,
+      stage: "planning",
+      message: "Upload product screenshots or a screen recording first. KAI will not create a product ad that does not show the real product.",
+    };
+  }
+
+  let currentStage: ProductionError["stage"] = "planning";
 
   try {
     updateProductionProgress({
@@ -277,9 +335,7 @@ export async function produceVideo(
     const content = mission.mission.contentPackage;
 
     if (!content) {
-      throw new Error(
-        "KAI could not generate a content package.",
-      );
+      throw new Error("KAI could not generate a content package.");
     }
 
     updateProductionProgress({
@@ -295,14 +351,45 @@ export async function produceVideo(
 
     const creativeBrain = await createKaiCreativeBrainPlan({
       topic,
-      platform: normalizePlatforms(
-        content.recommendedPlatform,
-      )[0],
+      platform: normalizePlatforms(content.recommendedPlatform)[0],
       candidateLimit: 5,
+      productName,
+      offerDescription,
+      destination: request.destination,
+      previousPerformanceInsights: [
+        approachDirection,
+        `Every scene must clearly support selling ${productName} without unsupported income promises.`,
+        "Use premium commercial composition, natural human detail, consistent characters and locations, and no text inside generated images.",
+      ],
     });
 
     const creativePlan = creativeBrain.selectedPlan;
-    const selectedConcept = creativeBrain.selectedConcept;
+    const selectedConcept = await directGenerativeVideo({
+      topic,
+      productName,
+      offerDescription,
+      audience,
+      destination: request.destination,
+      productAssetCount: productAssetUrls.length,
+      creativeApproach: request.creativeApproach ?? "product_demonstration",
+      platform: normalizePlatforms(content.recommendedPlatform)[0],
+      fallbackConcept: creativeBrain.selectedConcept,
+    });
+    const selectedCandidate = creativeBrain.candidates.find(
+      (candidate) => candidate.id === creativeBrain.selectedCandidateId,
+    );
+    const minimumQualityScore = Math.max(
+      0,
+      Math.min(100, request.minimumQualityScore ?? 76),
+    );
+
+    if (!selectedCandidate || selectedCandidate.score.total < minimumQualityScore) {
+      const score = selectedCandidate?.score.total ?? 0;
+      const concerns = selectedCandidate?.concerns.join(" ") || "The concept was incomplete.";
+      throw new Error(
+        `KAI stopped this video before spending money on assets: creative quality ${score}/100 is below the ${minimumQualityScore}/100 premium gate. ${concerns}`,
+      );
+    }
 
     updateProductionProgress({
       videoId,
@@ -338,89 +425,19 @@ export async function produceVideo(
 
     logger("Creating cinematic direction for every scene.");
 
-    const cinematicBlueprints =
-      selectedConcept.plan.scenes.map(
-        (scene, index) =>
-          directCinematicScene({
-            topic,
-            objective:
-              mission.mission.objective ??
-              DEFAULT_OBJECTIVE,
-            audience:
-              selectedConcept.plan.audience,
-            narration:
-              scene.narration ||
-              scene.onScreenText ||
-              scene.visual,
-            sceneNumber: index + 1,
-            totalScenes:
-              selectedConcept.plan.scenes.length,
-          }),
-      );
-
-    const imageTasks = selectedConcept.plan.scenes.map(
-      (scene, index) => {
-        const sceneId = `${videoId}-scene-${index + 1}`;
-        const directedPrompt =
-          directedScenes[index]?.blueprint.prompt.imagePrompt;
-
-        return {
-          videoId,
-          sceneId,
-          prompt: [
-            cinematicBlueprints[index]
-              ?.imagePromptPrefix,
-            normalizeText(
-              directedPrompt,
-              scene.visualPrompt,
-            ),
-            cinematicBlueprints[index]
-              ?.visualStory,
-            cinematicBlueprints[index]
-              ? `Lighting: ${cinematicBlueprints[index].lighting}.`
-              : "",
-            cinematicBlueprints[index]
-              ? `Color mood: ${cinematicBlueprints[index].colorMood}.`
-              : "",
-            cinematicBlueprints[index]
-              ? `Image style: ${cinematicBlueprints[index].imageStyle}.`
-              : "",
-          ]
-            .filter(Boolean)
-            .join(" "),
-        };
-      },
+    const cinematicBlueprints = selectedConcept.plan.scenes.map(
+      (scene, index) =>
+        directCinematicScene({
+          topic,
+          objective: mission.mission.objective ?? DEFAULT_OBJECTIVE,
+          audience: selectedConcept.plan.audience,
+          narration: scene.narration || scene.onScreenText || scene.visual,
+          sceneNumber: index + 1,
+          totalScenes: selectedConcept.plan.scenes.length,
+        }),
     );
 
-    currentStage = "generating_images";
-
-    const generatedImages = await generateImagesInQueue(
-      imageTasks,
-      {
-        onProgress: (progress) => {
-          updateProductionProgress({
-            videoId,
-            stage: "generating_images",
-            message:
-              progress.status === "retrying"
-                ? "KAI is retrying a scene image."
-                : progress.status === "completed"
-                  ? "Scene image completed."
-                  : "KAI is generating scene images.",
-            completed: progress.completed,
-            total: progress.total,
-            currentItem: progress.currentSceneId,
-          });
-        },
-      },
-    );
-
-    const imageUrlsBySceneId = new Map(
-      generatedImages.map((image) => [
-        image.sceneId,
-        image.imageUrl,
-      ]),
-    );
+    const imageUrlsBySceneId = new Map<string, string>();
 
     currentStage = "packaging";
 
@@ -432,18 +449,14 @@ export async function produceVideo(
       total: 1,
     });
 
-    const hashtags = normalizeHashtags(
-      content.hashtags,
+    const hashtags = normalizeHashtags(content.hashtags);
+    const recommendedPlatforms = normalizePlatforms(
+      content.recommendedPlatform,
     );
-    const recommendedPlatforms =
-      normalizePlatforms(
-        content.recommendedPlatform,
-      );
-    const objective =
-      normalizeText(
-        mission.mission.objective,
-        DEFAULT_OBJECTIVE,
-      );
+    const objective = normalizeText(
+      mission.mission.objective,
+      DEFAULT_OBJECTIVE,
+    );
     const reasoning = normalizeText(
       selectedConcept.reason,
       mission.mission.reason,
@@ -451,44 +464,39 @@ export async function produceVideo(
 
     const scenes = createProductionScenes({
       videoId,
+      productName,
       creativeScenes: selectedConcept.plan.scenes,
       directedScenes,
       imageUrlsBySceneId,
       hashtags,
       thumbnailTitle: creativePlan.title,
-      thumbnailPrompt:
-        selectedConcept.plan.thumbnailIdea,
+      thumbnailPrompt: selectedConcept.plan.thumbnailIdea,
       audience: selectedConcept.plan.audience,
       objective,
-      callToAction:
-        selectedConcept.plan.callToAction,
+      callToAction: selectedConcept.plan.callToAction,
       musicMood: selectedConcept.plan.musicStyle,
       confidence: selectedConcept.confidence,
       reasoning,
       cinematicBlueprints,
+      productAssetUrls,
       creativeBrain: {
-        selectedCandidateId:
-          creativeBrain.selectedCandidateId,
-        recommendation:
-          creativeBrain.recommendation,
-        selectedScore:
-          creativeBrain.candidates.find(
-            (candidate) =>
-              candidate.id ===
-              creativeBrain.selectedCandidateId,
-          )?.score,
-        candidateScores:
-          creativeBrain.candidates.map(
-            (candidate) => ({
-              id: candidate.id,
-              objective: candidate.objective,
-              conceptName:
-                candidate.concept.name,
-              score: candidate.score,
-              strengths: candidate.strengths,
-              concerns: candidate.concerns,
-            }),
-          ),
+        productName,
+        offerDescription,
+        audience,
+        destination: request.destination ?? "",
+        creativeApproach: request.creativeApproach ?? "emotional_story",
+        minimumQualityScore,
+        selectedCandidateId: creativeBrain.selectedCandidateId,
+        recommendation: creativeBrain.recommendation,
+        selectedScore: selectedCandidate.score,
+        candidateScores: creativeBrain.candidates.map((candidate) => ({
+          id: candidate.id,
+          objective: candidate.objective,
+          conceptName: candidate.concept.name,
+          score: candidate.score,
+          strengths: candidate.strengths,
+          concerns: candidate.concerns,
+        })),
       },
     });
 
@@ -506,9 +514,7 @@ export async function produceVideo(
       emotion: selectedConcept.plan.emotion,
     });
 
-    logger(
-      `Presenter selected: ${presenterDirection.presenter.name}.`,
-    );
+    logger(`Presenter selected: ${presenterDirection.presenter.name}.`);
 
     const voiceDirection = directVideoVoice({
       title: creativePlan.title,
@@ -525,9 +531,7 @@ export async function produceVideo(
       presenter: presenterDirection,
     });
 
-    logger(
-      `Voice selected: ${voiceDirection.voice.name}.`,
-    );
+    logger(`Voice selected: ${voiceDirection.voice.name}.`);
 
     logger("Generating narration audio.");
 
@@ -536,50 +540,74 @@ export async function produceVideo(
       voiceDirection,
     });
 
-    if (voiceGeneration.success) {
-      logger(
-        `Narration generated: ${voiceGeneration.audioUrl}.`,
-      );
-    } else {
-      logger(
-        `Narration generation failed: ${voiceGeneration.message}`,
+    if (!voiceGeneration.success || !voiceGeneration.audioUrl) {
+      throw new Error(
+        `Chatterbox narration is required before KAI may render this video. ${voiceGeneration.message}`,
       );
     }
+    logger(`Chatterbox narration generated: ${voiceGeneration.audioUrl}.`);
 
-    const presenterGeneration =
-      await generatePresenterVideo({
-        videoId,
-        presenter: {
-          ...presenterDirection,
-          presenterAudioUrl:
-            voiceGeneration.audioUrl,
-          status: "planned",
-        },
-      });
+    const presenterGeneration = await generatePresenterVideo({
+      videoId,
+      presenter: {
+        ...presenterDirection,
+        presenterAudioUrl: voiceGeneration.audioUrl,
+        status: "planned",
+      },
+    });
 
     if (presenterGeneration.success) {
-      logger(
-        `Presenter generated: ${presenterGeneration.videoUrl}.`,
-      );
+      logger(`Presenter generated: ${presenterGeneration.videoUrl}.`);
     } else {
-      logger(
-        `Presenter waiting: ${presenterGeneration.message}`,
-      );
+      logger(`Presenter waiting: ${presenterGeneration.message}`);
     }
 
-    const finalPresenter =
-      presenterGeneration.success
-        ? presenterGeneration.presenter
-        : {
-            ...presenterDirection,
-            presenterAudioUrl:
-              voiceGeneration.audioUrl,
-            status: "planned" as const,
-          };
+    const finalPresenter = presenterGeneration.success
+      ? presenterGeneration.presenter
+      : {
+          ...presenterDirection,
+          presenterAudioUrl: voiceGeneration.audioUrl,
+          status: "planned" as const,
+        };
 
-    const scenesWithVoice = scenes.map((scene) => ({
+    logger("KAI is selecting fresh, commercially usable vertical motion footage.");
+    let motion;
+    try {
+      motion = await generateMotionScenes({
+        videoId,
+        productName,
+        audience,
+        creativeApproach: request.creativeApproach ?? "product_demonstration",
+        scenes,
+        logger,
+      });
+    } catch (error) {
+      const motionFailure = getErrorMessage(error);
+      logger(
+        "Free context footage is unavailable. KAI switched automatically to a product-first demonstration.",
+      );
+      motion = {
+        scenes: createProductFirstFallback(scenes, productAssetUrls),
+        generated: 0,
+        failures: [motionFailure],
+      };
+    }
+    const stockSceneCount = motion.scenes.filter(
+      (scene) => scene.metadata?.productProof !== true,
+    ).length;
+    const allStockScenesHaveMotion = stockSceneCount === 0 || motion.generated === stockSceneCount;
+    if (!allStockScenesHaveMotion) throw new Error("KAI did not generate genuine motion for every context scene.");
+    logger(`Original stock-motion coverage: ${motion.generated}/${stockSceneCount} context scenes; ${scenes.length - stockSceneCount} real product-proof scenes.`);
+
+    const scenesWithVoice = motion.scenes.map((scene) => ({
       ...scene,
       voiceAudioUrl: voiceGeneration.audioUrl,
+      metadata: {
+        ...scene.metadata,
+        premiumMotionCoverage: `${motion.generated}/${scenes.length}`,
+        motionFailures: motion.failures,
+        motionAudioEnabled: false,
+      },
     }));
 
     const musicDirection = directVideoMusic({
@@ -596,12 +624,23 @@ export async function produceVideo(
       `Music selected: ${musicDirection.mood} (${musicDirection.energy} energy).`,
     );
 
-    const productionPackage: VideoProductionPackage = {
+    logger("KAI is composing a new local campaign soundtrack.");
+    const originalMusic = await generateLocalSoundtrack({
+      videoId,
+      productName,
+      audience,
+      creativeApproach: request.creativeApproach ?? "product_demonstration",
+      mood: musicDirection.mood,
+      energy: musicDirection.energy,
+      durationSeconds: calculateEstimatedLengthSeconds(selectedConcept.plan.scenes),
+      scenes: scenesWithVoice,
+    });
+
+    let productionPackage: VideoProductionPackage = {
       title: creativePlan.title,
       hook: selectedConcept.plan.hook,
       thumbnailTitle: creativePlan.title,
-      thumbnailPrompt:
-        selectedConcept.plan.thumbnailIdea,
+      thumbnailPrompt: selectedConcept.plan.thumbnailIdea,
       caption: content.caption,
       hashtags,
       cta: selectedConcept.plan.callToAction,
@@ -609,17 +648,29 @@ export async function produceVideo(
       objective,
       reasoning,
       confidence: selectedConcept.confidence,
-      estimatedLengthSeconds:
-        calculateEstimatedLengthSeconds(
-          selectedConcept.plan.scenes,
-        ),
+      estimatedLengthSeconds: calculateEstimatedLengthSeconds(
+        selectedConcept.plan.scenes,
+      ),
       recommendedPlatforms,
       musicMood: musicDirection.mood,
-      music: musicDirection.track,
+      music: originalMusic,
       presenter: finalPresenter,
       voice: voiceGeneration.voice,
       scenes: scenesWithVoice,
     };
+
+    productionPackage = await directAdaptiveVideo({
+      productionPackage,
+      adaptiveCreation: request.adaptiveCreation,
+      videoExperiment: request.videoExperiment,
+      creativeWinner: request.creativeWinner,
+      creativePortfolio: request.creativePortfolio,
+    });
+
+    enforcePremiumVideoQuality({
+      scenes: productionPackage.scenes,
+      music: productionPackage.music,
+    });
 
     updateProductionProgress({
       videoId,

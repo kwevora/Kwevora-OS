@@ -1,24 +1,12 @@
-import {
-  watchtower,
-} from "../Watchtower";
+import { watchtower } from "../Watchtower";
 
-import {
-  judgmentEngine,
-  type Judgment,
-} from "../JudgmentEngine";
+import { judgmentEngine, type Judgment } from "../JudgmentEngine";
 
-import {
-  executionEngine,
-  type ExecutionPlan,
-} from "../ExecutionEngine";
+import { executionEngine, type ExecutionPlan } from "../ExecutionEngine";
 
-import type {
-  ExecutiveReview,
-} from "../ExecutiveBrain";
+import type { ExecutiveReview } from "../ExecutiveBrain";
 
-import type {
-  OrganizationSnapshot,
-} from "../OrganizationMemory";
+import type { OrganizationSnapshot } from "../OrganizationMemory";
 
 export type OvernightExecutionInput = {
   executiveReview: ExecutiveReview;
@@ -31,28 +19,18 @@ export type OvernightExecutionResult = {
 };
 
 export class OvernightExecution {
-  run(
-    input: OvernightExecutionInput,
-  ): OvernightExecutionResult {
-    const watchtowerStatus =
-      watchtower.summarize();
+  async run(input: OvernightExecutionInput): Promise<OvernightExecutionResult> {
+    const watchtowerStatus = watchtower.summarize();
 
-    const judgment =
-      judgmentEngine.evaluate({
-        executiveReview:
-          input.executiveReview,
+    const judgment = judgmentEngine.evaluate({
+      executiveReview: input.executiveReview,
 
-        organization:
-          input.organizationSnapshot,
+      organization: input.organizationSnapshot,
 
-        watchtower:
-          watchtowerStatus,
-      });
+      watchtower: watchtowerStatus,
+    });
 
-    const executionPlan =
-      executionEngine.createPlan(
-        judgment,
-      );
+    const executionPlan = await executionEngine.createPlan(judgment);
 
     return {
       judgment,
@@ -61,5 +39,4 @@ export class OvernightExecution {
   }
 }
 
-export const overnightExecution =
-  new OvernightExecution();
+export const overnightExecution = new OvernightExecution();

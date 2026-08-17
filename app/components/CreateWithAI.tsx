@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type GenerationStatus =
   | "idle"
@@ -35,7 +35,13 @@ type GeneratedVideo = {
   status: string;
   selectedConcept?: SelectedConcept;
   alternateConcepts?: AlternateConcept[];
+  qualityScore?: { total?: number };
 };
+
+type CreativeApproach =
+  | "emotional_story"
+  | "problem_solution"
+  | "product_demonstration";
 
 type GenerateVideoResponse = {
   success: boolean;
@@ -43,10 +49,41 @@ type GenerateVideoResponse = {
   error?: string;
 };
 
+type ProductUploadResponse = {
+  success: boolean;
+  urls?: string[];
+  error?: string;
+};
+
+type ProductIngestResponse = {
+  success: boolean;
+  product?: {
+    title: string;
+    description: string;
+    productAssetUrls: string[];
+  };
+  error?: string;
+};
+
+type StanProfileResponse = {
+  success: boolean;
+  stan?: {
+    profile?: {
+      productUrl?: string;
+      productName?: string;
+    };
+  };
+};
+
 export default function CreateWithAI() {
-  const [topic, setTopic] = useState(
-    "Help people take one step toward escaping the paycheck-to-paycheck lifestyle",
-  );
+  const [topic, setTopic] = useState("");
+  const [productName, setProductName] = useState("");
+  const [offerDescription, setOfferDescription] = useState("");
+  const [audience, setAudience] = useState("");
+  const [destination, setDestination] = useState("");
+  const [productFiles, setProductFiles] = useState<File[]>([]);
+  const [creativeApproach, setCreativeApproach] =
+    useState<CreativeApproach>("product_demonstration");
 
   const [status, setStatus] =
     useState<GenerationStatus>("idle");
@@ -56,6 +93,23 @@ export default function CreateWithAI() {
 
   const [errorMessage, setErrorMessage] =
     useState("");
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/kai/stan-store", { cache: "no-store" })
+      .then((response) => response.json() as Promise<StanProfileResponse>)
+      .then((result) => {
+        if (!active || !result.success) return;
+        const savedProductUrl = result.stan?.profile?.productUrl?.trim() ?? "";
+        const savedProductName = result.stan?.profile?.productName?.trim() ?? "";
+        if (savedProductUrl) setDestination(savedProductUrl);
+        if (savedProductName) setProductName(savedProductName);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const isWorking =
     status === "preparing" ||
@@ -94,21 +148,48 @@ export default function CreateWithAI() {
   }
 
   async function generateVideo() {
-    const cleanTopic = topic.trim();
-
-    if (!cleanTopic) {
-      setStatus("error");
-      setErrorMessage(
-        "Enter a topic before asking KAI to create the video.",
-      );
-      return;
-    }
-
     setStatus("preparing");
     setErrorMessage("");
     setGeneratedVideo(null);
 
     try {
+      let productAssetUrls: string[] = [];
+      let resolvedProductName = productName;
+      let resolvedOfferDescription = offerDescription;
+      let resolvedTopic = topic.trim();
+      if (productFiles.length > 0) {
+        const uploadData = new FormData();
+        productFiles.forEach((file) => uploadData.append("files", file));
+        const uploadResponse = await fetch("/api/kai/product-assets", { method: "POST", body: uploadData });
+        const uploadResult = (await uploadResponse.json()) as ProductUploadResponse;
+        if (!uploadResponse.ok || !uploadResult.success || !uploadResult.urls?.length) {
+          throw new Error(uploadResult.error || "KAI could not upload the product proof.");
+        }
+        productAssetUrls = uploadResult.urls;
+      } else {
+        if (!destination.trim()) throw new Error("Connect or paste the Stan Store product link so KAI can inspect the product automatically.");
+        const ingestResponse = await fetch("/api/kai/product-ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sourceUrl: destination.trim() }),
+        });
+        const ingestResult = (await ingestResponse.json()) as ProductIngestResponse;
+        if (!ingestResponse.ok || !ingestResult.success || !ingestResult.product?.productAssetUrls.length) {
+          throw new Error(ingestResult.error || "KAI could not inspect the Stan product page.");
+        }
+        productAssetUrls = ingestResult.product.productAssetUrls;
+        resolvedProductName = ingestResult.product.title || productName;
+        resolvedOfferDescription = ingestResult.product.description || offerDescription;
+        setProductName(resolvedProductName);
+        setOfferDescription(resolvedOfferDescription);
+      }
+
+      if (!resolvedProductName.trim()) resolvedProductName = "Digital product";
+      if (!resolvedOfferDescription.trim()) resolvedOfferDescription = `A practical digital product called ${resolvedProductName}.`;
+      if (!resolvedTopic) {
+        resolvedTopic = `Create a stop-scroll, believable product demonstration for ${resolvedProductName}. Show the real product solving the buyer's problem, prove the outcome visually, and lead naturally to the offer without displaying internal instructions.`;
+      }
+
       const response = await fetch(
         "/api/kai/generate-video",
         {
@@ -118,12 +199,19 @@ export default function CreateWithAI() {
               "application/json",
           },
           body: JSON.stringify({
-            topic: cleanTopic,
+            topic: resolvedTopic,
+            productName: resolvedProductName,
+            offerDescription: resolvedOfferDescription,
+            audience,
+            destination,
+            productAssetUrls,
+            creativeApproach: productFiles.length > 0 ? creativeApproach : undefined,
+            minimumQualityScore: 76,
             format: "vertical",
             aspectRatio: "9:16",
             durationSeconds: 30,
             creationMode:
-              "faceless-text-video",
+              "kai-directed-product-proof-video",
             sendToReviewQueue: true,
           }),
         },
@@ -174,10 +262,14 @@ export default function CreateWithAI() {
       </h3>
 
       <p className="mt-3 max-w-3xl leading-7 text-gray-300">
-        Give KAI the topic. KAI will compare creative
-        concepts, select the strongest direction, render
-        the video, and prepare it for your Review Queue.
+        Give KAI the product link. KAI will inspect the listing, learn the offer,
+        select the strongest direction, create the video, quality-check it, and
+        prepare only the passing result for your Review Queue.
       </p>
+
+      <div className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4 text-sm leading-6 text-emerald-100">
+        <strong>KAI Autopilot:</strong> your saved Stan product is loaded automatically. Click once and KAI handles product research, audience, hook, direction, narration, footage, music, quality control, and the Review Queue.
+      </div>
 
       <div className="mt-6">
         <label
@@ -196,8 +288,54 @@ export default function CreateWithAI() {
           disabled={isWorking}
           rows={4}
           className="mt-3 w-full resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-white outline-none transition placeholder:text-gray-500 focus:border-cyan-400/50 disabled:cursor-not-allowed disabled:opacity-60"
-          placeholder="Tell KAI what the video should be about..."
+          placeholder="Optional — leave blank and KAI will choose the strongest product-specific angle automatically."
         />
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <label className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
+          Product (filled automatically)
+          <input value={productName} onChange={(event) => setProductName(event.target.value)} disabled={isWorking} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-base normal-case tracking-normal text-white" />
+        </label>
+        <label className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
+          Optional creative override
+          <select value={creativeApproach} onChange={(event) => setCreativeApproach(event.target.value as CreativeApproach)} disabled={isWorking} className="mt-2 w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-base normal-case tracking-normal text-white">
+            <option value="emotional_story">Emotional story</option>
+            <option value="problem_solution">Problem → solution</option>
+            <option value="product_demonstration">Product demonstration</option>
+          </select>
+        </label>
+        <label className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300 md:col-span-2">
+          What the buyer gets (learned automatically)
+          <textarea value={offerDescription} onChange={(event) => setOfferDescription(event.target.value)} disabled={isWorking} rows={3} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-base normal-case tracking-normal text-white" />
+        </label>
+        <label className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
+          Audience
+          <textarea value={audience} onChange={(event) => setAudience(event.target.value)} disabled={isWorking} rows={3} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-base normal-case tracking-normal text-white" />
+        </label>
+        <label className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
+          Stan Store product link
+          <textarea value={destination} onChange={(event) => setDestination(event.target.value)} disabled={isWorking} rows={3} placeholder="Paste the exact product link" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-base normal-case tracking-normal text-white placeholder:text-gray-600" />
+        </label>
+        <label className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300 md:col-span-2">
+          Optional: give KAI private product footage once
+          <span className="mt-2 block text-sm font-normal normal-case tracking-normal text-gray-300">
+            KAI automatically reads the public Stan product page. Only add files when you want KAI to show private pages that Stan does not display publicly. KAI will reuse public product proof automatically.
+          </span>
+          <input
+            type="file"
+            multiple
+            accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime"
+            disabled={isWorking}
+            onChange={(event) => setProductFiles(Array.from(event.target.files ?? []))}
+            className="mt-3 block w-full rounded-xl border border-dashed border-cyan-300/40 bg-black/30 px-4 py-4 text-sm normal-case tracking-normal text-white file:mr-4 file:rounded-lg file:border-0 file:bg-cyan-400 file:px-4 file:py-2 file:font-bold file:text-black"
+          />
+          {productFiles.length > 0 ? (
+            <span className="mt-2 block text-sm font-normal normal-case tracking-normal text-emerald-300">
+              {productFiles.length} real product file{productFiles.length === 1 ? "" : "s"} ready: {productFiles.map((file) => file.name).join(", ")}
+            </span>
+          ) : null}
+        </label>
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -209,7 +347,7 @@ export default function CreateWithAI() {
         >
           {isWorking
             ? "KAI Is Creating..."
-            : "Create Actual Video"}
+            : "Let KAI Build the Campaign"}
         </button>
 
         <div className="rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-gray-300">
@@ -264,6 +402,11 @@ export default function CreateWithAI() {
                 .selectedConcept.reason
             }
           </p>
+          {typeof generatedVideo.qualityScore?.total === "number" ? (
+            <p className="mt-3 text-sm font-black text-emerald-300">
+              Premium quality gate: {generatedVideo.qualityScore.total}/100 passed
+            </p>
+          ) : null}
         </div>
       )}
 

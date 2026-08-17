@@ -1,15 +1,8 @@
-import {
-  memoryBrain,
-} from "./MemoryBrain";
+import { memoryBrain } from "./MemoryBrain";
 
-import {
-  db,
-} from "./database/database";
+import { getDatabase } from "./database/database";
 
-export type LearningResult =
-  | "success"
-  | "partial"
-  | "failure";
+export type LearningResult = "success" | "partial" | "failure";
 
 export type LearningOutcome = {
   id: string;
@@ -101,175 +94,104 @@ type LearningEventRow = {
   tags: string;
 };
 
-function clampConfidence(
-  value: number,
-): number {
-  return Math.max(
-    0,
-    Math.min(
-      100,
-      Math.round(value),
-    ),
-  );
+function clampConfidence(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function normalizeTags(
-  tags: string[],
-): string[] {
+function normalizeTags(tags: string[]): string[] {
   return Array.from(
-    new Set(
-      tags
-        .map(
-          (tag) =>
-            tag.trim().toLowerCase(),
-        )
-        .filter(Boolean),
-    ),
+    new Set(tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean)),
   );
 }
 
-function parseTags(
-  value: string,
-): string[] {
+function parseTags(value: string): string[] {
   try {
-    const parsed: unknown =
-      JSON.parse(value);
+    const parsed: unknown = JSON.parse(value);
 
     return Array.isArray(parsed)
-      ? parsed.filter(
-          (
-            tag,
-          ): tag is string =>
-            typeof tag === "string",
-        )
+      ? parsed.filter((tag): tag is string => typeof tag === "string")
       : [];
   } catch {
     return [];
   }
 }
 
-function rowToLearningEvent(
-  row: LearningEventRow,
-): LearningEvent {
+function rowToLearningEvent(row: LearningEventRow): LearningEvent {
   return {
-    id:
-      row.id,
+    id: row.id,
 
-    situation:
-      row.situation,
+    situation: row.situation,
 
-    decision:
-      row.decision,
+    decision: row.decision,
 
-    outcome:
-      row.outcome,
+    outcome: row.outcome,
 
-    lesson:
-      row.lesson,
+    lesson: row.lesson,
 
-    confidenceBefore:
-      row.confidenceBefore,
+    confidenceBefore: row.confidenceBefore,
 
-    confidenceAfter:
-      row.confidenceAfter,
+    confidenceAfter: row.confidenceAfter,
 
-    createdAt:
-      row.createdAt,
+    createdAt: row.createdAt,
 
-    tags:
-      parseTags(
-        row.tags,
-      ),
+    tags: parseTags(row.tags),
   };
 }
 
-function confidenceForOutcome(
-  outcome: LearningResult,
-): number {
-  if (
-    outcome === "success"
-  ) {
+function confidenceForOutcome(outcome: LearningResult): number {
+  if (outcome === "success") {
     return 95;
   }
 
-  if (
-    outcome === "partial"
-  ) {
+  if (outcome === "partial") {
     return 75;
   }
 
   return 50;
 }
 
-function buildOutcomeText(
-  outcome: LearningOutcome,
-): string {
+function buildOutcomeText(outcome: LearningOutcome): string {
   const observations =
     outcome.observations.length > 0
-      ? outcome.observations.join(
-          " | ",
-        )
+      ? outcome.observations.join(" | ")
       : "No observations were recorded.";
 
-  return [
-    `Result: ${outcome.outcome}`,
-    `Observations: ${observations}`,
-  ].join(
+  return [`Result: ${outcome.outcome}`, `Observations: ${observations}`].join(
     "\n",
   );
 }
 
-function buildLessonText(
-  outcome: LearningOutcome,
-): string {
-  if (
-    outcome.lessons.length > 0
-  ) {
-    return outcome.lessons.join(
-      " | ",
-    );
+function buildLessonText(outcome: LearningOutcome): string {
+  if (outcome.lessons.length > 0) {
+    return outcome.lessons.join(" | ");
   }
 
-  return outcome.outcome ===
-    "success"
+  return outcome.outcome === "success"
     ? "The decision produced the intended result and should be considered again in similar situations."
-    : outcome.outcome ===
-        "partial"
+    : outcome.outcome === "partial"
       ? "The decision produced mixed results and should be adjusted before repeating it."
       : "The decision did not produce the intended result and should not be repeated without a meaningful change.";
 }
 
 export class LearningBrain {
-  recordExperience(
+  async recordExperience(
     input: LearningExperienceInput,
-  ): LearningEvent {
-    const createdAt =
-      input.createdAt ??
-      new Date().toISOString();
+  ): Promise<LearningEvent> {
+    const createdAt = input.createdAt ?? new Date().toISOString();
 
-    const id =
-      input.id ??
-      `learning-${crypto.randomUUID()}`;
+    const id = input.id ?? `learning-${crypto.randomUUID()}`;
 
-    const confidenceBefore =
-      clampConfidence(
-        input.confidenceBefore ??
-          50,
-      );
+    const confidenceBefore = clampConfidence(input.confidenceBefore ?? 50);
 
-    const confidenceAfter =
-      clampConfidence(
-        input.confidenceAfter ??
-          confidenceBefore,
-      );
+    const confidenceAfter = clampConfidence(
+      input.confidenceAfter ?? confidenceBefore,
+    );
 
-    const tags =
-      normalizeTags(
-        input.tags ?? [],
-      );
+    const tags = normalizeTags(input.tags ?? []);
 
-    db.prepare(
-      `
+    await getDatabase()
+      .prepare(
+        `
       INSERT OR REPLACE INTO learning_events
       (
         id,
@@ -285,34 +207,30 @@ export class LearningBrain {
       VALUES
       (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
-    ).run(
-      id,
-      input.situation.trim(),
-      input.decision.trim(),
-      input.outcome.trim(),
-      input.lesson.trim(),
-      confidenceBefore,
-      confidenceAfter,
-      createdAt,
-      JSON.stringify(
-        tags,
-      ),
-    );
+      )
+      .bind(
+        id,
+        input.situation.trim(),
+        input.decision.trim(),
+        input.outcome.trim(),
+        input.lesson.trim(),
+        confidenceBefore,
+        confidenceAfter,
+        createdAt,
+        JSON.stringify(tags),
+      )
+      .run();
 
     return {
       id,
 
-      situation:
-        input.situation.trim(),
+      situation: input.situation.trim(),
 
-      decision:
-        input.decision.trim(),
+      decision: input.decision.trim(),
 
-      outcome:
-        input.outcome.trim(),
+      outcome: input.outcome.trim(),
 
-      lesson:
-        input.lesson.trim(),
+      lesson: input.lesson.trim(),
 
       confidenceBefore,
 
@@ -324,307 +242,167 @@ export class LearningBrain {
     };
   }
 
-  learn(
-    outcome: LearningOutcome,
-  ): LearningSummary {
-    const confidenceBefore =
-      50;
+  async learn(outcome: LearningOutcome): Promise<LearningSummary> {
+    const confidenceBefore = 50;
 
-    const confidenceAfter =
-      confidenceForOutcome(
-        outcome.outcome,
-      );
+    const confidenceAfter = confidenceForOutcome(outcome.outcome);
 
-    const lesson =
-      buildLessonText(
-        outcome,
-      );
+    const lesson = buildLessonText(outcome);
 
-    const learningEvent =
-      this.recordExperience({
-        id:
-          outcome.id,
+    const learningEvent = await this.recordExperience({
+      id: outcome.id,
 
-        situation:
-          outcome.objective,
+      situation: outcome.objective,
 
-        decision:
-          outcome.title,
+      decision: outcome.title,
 
-        outcome:
-          buildOutcomeText(
-            outcome,
-          ),
+      outcome: buildOutcomeText(outcome),
 
-        lesson,
+      lesson,
 
-        confidenceBefore,
+      confidenceBefore,
 
-        confidenceAfter,
+      confidenceAfter,
 
-        createdAt:
-          outcome.completedAt,
+      createdAt: outcome.completedAt,
 
-        tags: [
-          "learning",
-          "experience",
-          outcome.objective,
-          outcome.outcome,
-        ],
-      });
+      tags: ["learning", "experience", outcome.objective, outcome.outcome],
+    });
 
-    outcome.lessons.forEach(
-      (
-        currentLesson,
-        index,
-      ) => {
+    await Promise.all(
+      outcome.lessons.map((currentLesson, index) =>
         memoryBrain.remember({
-          id:
-            `${outcome.id}-lesson-${index}`,
+          id: `${outcome.id}-lesson-${index}`,
 
-          type:
-            "learning",
+          type: "learning",
 
-          title:
-            outcome.title,
+          title: outcome.title,
 
-          description:
-            currentLesson,
+          description: currentLesson,
 
-          importance:
-            outcome.outcome ===
-              "failure"
-              ? "critical"
-              : "high",
+          importance: outcome.outcome === "failure" ? "critical" : "high",
 
-          learnedAt:
-            outcome.completedAt,
+          learnedAt: outcome.completedAt,
 
-          tags: [
-            "learning",
-            "experience",
-            outcome.objective,
-            outcome.outcome,
-          ],
-        });
-      },
+          tags: ["learning", "experience", outcome.objective, outcome.outcome],
+        }),
+      ),
     );
 
-    if (
-      outcome.lessons.length === 0
-    ) {
-      memoryBrain.remember({
-        id:
-          `${outcome.id}-lesson`,
+    if (outcome.lessons.length === 0) {
+      await memoryBrain.remember({
+        id: `${outcome.id}-lesson`,
 
-        type:
-          "learning",
+        type: "learning",
 
-        title:
-          outcome.title,
+        title: outcome.title,
 
-        description:
-          lesson,
+        description: lesson,
 
-        importance:
-          outcome.outcome ===
-            "failure"
-            ? "critical"
-            : "high",
+        importance: outcome.outcome === "failure" ? "critical" : "high",
 
-        learnedAt:
-          outcome.completedAt,
+        learnedAt: outcome.completedAt,
 
-        tags: [
-          "learning",
-          "experience",
-          outcome.objective,
-          outcome.outcome,
-        ],
+        tags: ["learning", "experience", outcome.objective, outcome.outcome],
       });
     }
 
     const nextImprovement =
       outcome.recommendations[0] ??
-      (
-        outcome.outcome ===
-          "success"
-          ? "Repeat the strongest parts of this decision in similar situations."
-          : outcome.outcome ===
-              "partial"
-            ? "Adjust the weakest part of the decision before trying again."
-            : "Choose a different approach before repeating this decision."
-      );
+      (outcome.outcome === "success"
+        ? "Repeat the strongest parts of this decision in similar situations."
+        : outcome.outcome === "partial"
+          ? "Adjust the weakest part of the decision before trying again."
+          : "Choose a different approach before repeating this decision.");
 
     return {
-      learned:
-        true,
+      learned: true,
 
-      confidence:
-        confidenceAfter,
+      confidence: confidenceAfter,
 
-      confidenceChange:
-        confidenceAfter -
-        confidenceBefore,
+      confidenceChange: confidenceAfter - confidenceBefore,
 
       nextImprovement,
 
-      learningEventId:
-        learningEvent.id,
+      learningEventId: learningEvent.id,
     };
   }
 
-  latest(
-    limit = 20,
-  ): LearningEvent[] {
-    const safeLimit =
-      Math.max(
-        1,
-        Math.min(
-          200,
-          Math.floor(limit),
-        ),
-      );
+  async latest(limit = 20): Promise<LearningEvent[]> {
+    const safeLimit = Math.max(1, Math.min(200, Math.floor(limit)));
 
-    const rows =
-      db.prepare(
+    const { results: rows = [] } = await getDatabase()
+      .prepare(
         `
         SELECT *
         FROM learning_events
         ORDER BY createdAt DESC
         LIMIT ?
         `,
-      ).all(
-        safeLimit,
-      ) as LearningEventRow[];
+      )
+      .bind(safeLimit)
+      .all<LearningEventRow>();
 
-    return rows.map(
-      rowToLearningEvent,
-    );
+    return rows.map(rowToLearningEvent);
   }
 
-  recall(
-    tags: string[],
-    limit = 20,
-  ): LearningEvent[] {
-    const normalizedTags =
-      normalizeTags(
-        tags,
-      );
+  async recall(tags: string[], limit = 20): Promise<LearningEvent[]> {
+    const normalizedTags = normalizeTags(tags);
 
-    if (
-      normalizedTags.length === 0
-    ) {
+    if (normalizedTags.length === 0) {
       return [];
     }
 
-    const rows =
-      db.prepare(
+    const { results: rows = [] } = await getDatabase()
+      .prepare(
         `
         SELECT *
         FROM learning_events
         ORDER BY createdAt DESC
         `,
-      ).all() as LearningEventRow[];
+      )
+      .all<LearningEventRow>();
 
     return rows
-      .map(
-        rowToLearningEvent,
-      )
-      .filter(
-        (event) =>
-          normalizedTags.some(
-            (tag) =>
-              event.tags.includes(
-                tag,
-              ),
-          ),
-      )
-      .slice(
-        0,
-        Math.max(
-          1,
-          Math.min(
-            200,
-            Math.floor(limit),
-          ),
-        ),
-      );
+      .map(rowToLearningEvent)
+      .filter((event) => normalizedTags.some((tag) => event.tags.includes(tag)))
+      .slice(0, Math.max(1, Math.min(200, Math.floor(limit))));
   }
 
-  confidenceFor(
-    tags: string[],
-  ): number {
-    const events =
-      this.recall(
-        tags,
-        25,
-      );
+  async confidenceFor(tags: string[]): Promise<number> {
+    const events = await this.recall(tags, 25);
 
-    if (
-      events.length === 0
-    ) {
+    if (events.length === 0) {
       return 0;
     }
 
-    const weightedTotal =
-      events.reduce(
-        (
-          total,
-          event,
-          index,
-        ) => {
-          const recencyWeight =
-            Math.max(
-              1,
-              25 - index,
-            );
+    const weightedTotal = events.reduce((total, event, index) => {
+      const recencyWeight = Math.max(1, 25 - index);
 
-          return (
-            total +
-            event.confidenceAfter *
-              recencyWeight
-          );
-        },
-        0,
-      );
+      return total + event.confidenceAfter * recencyWeight;
+    }, 0);
 
-    const totalWeight =
-      events.reduce(
-        (
-          total,
-          _event,
-          index,
-        ) =>
-          total +
-          Math.max(
-            1,
-            25 - index,
-          ),
-        0,
-      );
-
-    return clampConfidence(
-      weightedTotal /
-        totalWeight,
+    const totalWeight = events.reduce(
+      (total, _event, index) => total + Math.max(1, 25 - index),
+      0,
     );
+
+    return clampConfidence(weightedTotal / totalWeight);
   }
 
-  all(): LearningEvent[] {
-    const rows =
-      db.prepare(
+  async all(): Promise<LearningEvent[]> {
+    const { results: rows = [] } = await getDatabase()
+      .prepare(
         `
         SELECT *
         FROM learning_events
         ORDER BY createdAt DESC
         `,
-      ).all() as LearningEventRow[];
+      )
+      .all<LearningEventRow>();
 
-    return rows.map(
-      rowToLearningEvent,
-    );
+    return rows.map(rowToLearningEvent);
   }
 }
 
-export const learningBrain =
-  new LearningBrain();
+export const learningBrain = new LearningBrain();

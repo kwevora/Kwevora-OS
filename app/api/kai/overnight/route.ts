@@ -1,6 +1,21 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { NextResponse } from "next/server";
+import {
+  NextRequest,
+  NextResponse,
+} from "next/server";
+
+import {
+  POST as runOutcomeFollowUp,
+} from "@/app/api/kai/follow-up/route";
+
+import {
+  POST as processPublishingHandoff,
+} from "@/app/api/kai/publishing-handoff/route";
+
+import {
+  POST as collectPerformanceLearning,
+} from "@/app/api/kai/performance-learning/route";
 
 import {
   overnightEngine,
@@ -25,6 +40,27 @@ type OvernightMoneyHuntResult = {
   bestOpportunity: string;
 
   result: unknown;
+};
+
+type AutomatedFollowUpResult = {
+  success: boolean;
+  learned: boolean;
+  message: string;
+  result?: unknown;
+};
+
+type AutomatedPublishingResult = {
+  assessed: number;
+  executed: number;
+  blocked: number;
+  results: unknown[];
+};
+
+type AutomatedPerformanceLearningResult = {
+  success: boolean;
+  collected: boolean;
+  message: string;
+  result?: unknown;
 };
 
 const kwevoraDataFolder =
@@ -246,10 +282,128 @@ async function runMoneyHunt(
   }
 }
 
+async function runAutomatedFollowUp(
+  request: Request,
+): Promise<AutomatedFollowUpResult> {
+  try {
+    const response =
+      await runOutcomeFollowUp(
+        new NextRequest(
+          new URL(
+            "/api/kai/follow-up",
+            request.url,
+          ),
+          {
+            method: "POST",
+            headers:
+              request.headers,
+            body: "{}",
+          },
+        ),
+      );
+
+    const result =
+      (await response.json()) as {
+        success?: boolean;
+        learned?: boolean;
+        message?: string;
+      };
+
+    return {
+      success:
+        result.success === true,
+      learned:
+        result.learned === true,
+      message:
+        cleanFollowUpMessage(
+          result.message,
+        ),
+      result,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      learned: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "KAI could not run the automatic outcome follow-up.",
+    };
+  }
+}
+
+async function runAutomatedPublishing(
+  request: Request,
+): Promise<AutomatedPublishingResult> {
+  try {
+    const response = await processPublishingHandoff(new NextRequest(
+      new URL("/api/kai/publishing-handoff", request.url),
+      { method: "POST", headers: request.headers, body: "{}" },
+    ));
+    const result = await response.json() as {
+      executed?: boolean;
+      publishing?: { total?: number; counts?: Record<string, number> };
+    };
+    const total = result.publishing?.total ?? 0;
+    const blocked = (result.publishing?.counts?.blocked ?? 0) +
+      (result.publishing?.counts?.stopped ?? 0);
+
+    return {
+      assessed: total,
+      executed: result.executed ? 1 : 0,
+      blocked,
+      results: [result],
+    };
+  } catch (error) {
+    return {
+      assessed: 0,
+      executed: 0,
+      blocked: 0,
+      results: [{
+        executed: false,
+        message: error instanceof Error
+          ? error.message
+          : "KAI could not assess approved publishing items during this cycle.",
+      }],
+    };
+  }
+}
+
+async function runPerformanceLearning(request: Request): Promise<AutomatedPerformanceLearningResult> {
+  try {
+    const response = await collectPerformanceLearning(new NextRequest(
+      new URL("/api/kai/performance-learning", request.url),
+      { method: "POST", headers: request.headers, body: JSON.stringify({ action: "collect_next" }) },
+    ));
+    const result = await response.json() as { success?: boolean; collected?: boolean; message?: string };
+    return {
+      success: result.success === true,
+      collected: result.collected === true,
+      message: cleanFollowUpMessage(result.message),
+      result,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      collected: false,
+      message: error instanceof Error ? error.message : "KAI could not collect verified performance learning.",
+    };
+  }
+}
+
+function cleanFollowUpMessage(
+  value: unknown,
+): string {
+  return typeof value === "string" &&
+    value.trim()
+    ? value.trim()
+    : "KAI completed the automatic outcome follow-up scan.";
+}
+
 export async function GET() {
   try {
     const latestReport =
-      overnightEngine.latest();
+      await overnightEngine.latest();
 
     const latestMoneyHunt =
       await readLatestMoneyHunt();
@@ -393,6 +547,19 @@ export async function POST(
         request,
       );
 
+    const autonomousPublishing =
+      await runAutomatedPublishing(
+        request,
+      );
+
+    const performanceLearning =
+      await runPerformanceLearning(request);
+
+    const outcomeFollowUp =
+      await runAutomatedFollowUp(
+        request,
+      );
+
     return NextResponse.json({
       success: true,
 
@@ -433,11 +600,20 @@ export async function POST(
         result
           .reviewItemId,
 
+      autonomousCycle:
+        result.autonomousCycle,
+
+      autonomousPublishing,
+
+      performanceLearning,
+
       /*
        * NEW:
        * Overnight Money Mode result.
        */
       moneyHunt,
+
+      outcomeFollowUp,
 
       overnightJobs: {
         businessOperations:
@@ -450,6 +626,20 @@ export async function POST(
               ? "verified_product_found"
               : "search_continues"
             : "failed",
+
+        outcomeFollowUp:
+          outcomeFollowUp.learned
+            ? "learned"
+            : outcomeFollowUp.success
+              ? "checked"
+              : "needs_attention",
+
+        performanceLearning:
+          performanceLearning.collected
+            ? "verified_result_learned"
+            : performanceLearning.success
+              ? "checked"
+              : "needs_attention",
       },
 
       message:

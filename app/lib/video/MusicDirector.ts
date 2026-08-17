@@ -45,6 +45,8 @@ type MusicTrackDefinition = {
   fadeOutSeconds: number;
 };
 
+// Only list files that actually ship with KWEVORA. Never pretend a mood has a
+// unique soundtrack when the file does not exist.
 const MUSIC_TRACKS: MusicTrackDefinition[] = [
   {
     id: "cinematic-rise-01",
@@ -56,33 +58,6 @@ const MUSIC_TRACKS: MusicTrackDefinition[] = [
     fadeOutSeconds: 2.5,
   },
   {
-    id: "emotional-journey-01",
-    mood: "emotional",
-    energy: "low",
-    url: "/music/emotional-journey-01.mp3",
-    volume: 0.2,
-    fadeInSeconds: 2,
-    fadeOutSeconds: 3,
-  },
-  {
-    id: "motivational-drive-01",
-    mood: "motivational",
-    energy: "high",
-    url: "/music/motivational-drive-01.mp3",
-    volume: 0.23,
-    fadeInSeconds: 1,
-    fadeOutSeconds: 2,
-  },
-  {
-    id: "suspense-build-01",
-    mood: "suspenseful",
-    energy: "medium",
-    url: "/music/suspense-build-01.mp3",
-    volume: 0.19,
-    fadeInSeconds: 1.5,
-    fadeOutSeconds: 2,
-  },
-  {
     id: "uplifting-future-01",
     mood: "uplifting",
     energy: "medium",
@@ -90,33 +65,6 @@ const MUSIC_TRACKS: MusicTrackDefinition[] = [
     volume: 0.22,
     fadeInSeconds: 1.5,
     fadeOutSeconds: 2.5,
-  },
-  {
-    id: "confident-momentum-01",
-    mood: "confident",
-    energy: "medium",
-    url: "/music/confident-momentum-01.mp3",
-    volume: 0.22,
-    fadeInSeconds: 1,
-    fadeOutSeconds: 2,
-  },
-  {
-    id: "calm-focus-01",
-    mood: "calm",
-    energy: "low",
-    url: "/music/calm-focus-01.mp3",
-    volume: 0.18,
-    fadeInSeconds: 2,
-    fadeOutSeconds: 3,
-  },
-  {
-    id: "energetic-social-01",
-    mood: "energetic",
-    energy: "high",
-    url: "/music/energetic-social-01.mp3",
-    volume: 0.23,
-    fadeInSeconds: 0.75,
-    fadeOutSeconds: 1.5,
   },
 ];
 
@@ -145,6 +93,9 @@ function includesAny(
 function determineMood(
   input: MusicDirectionInput,
 ): MusicMood {
+  const explicitMood = input.preferredMood?.trim().toLowerCase();
+  const knownMood = MUSIC_TRACKS.find((track) => track.mood === explicitMood)?.mood;
+  if (knownMood) return knownMood;
   const sceneText = input.scenes
     .map((scene) =>
       [

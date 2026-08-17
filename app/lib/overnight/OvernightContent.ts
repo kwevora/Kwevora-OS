@@ -3,17 +3,11 @@ import {
   type ContentPackage,
 } from "../ContentIntelligenceEngine";
 
-import {
-  reviewQueueStore,
-} from "./ReviewQueueStore";
+import { reviewQueueStore } from "./ReviewQueueStore";
 
-import type {
-  DecisionRequest,
-} from "../DecisionCore";
+import type { DecisionRequest } from "../DecisionCore";
 
-import type {
-  KaiDecision,
-} from "../kaiDecisionEngine";
+import type { KaiDecision } from "../kaiDecisionEngine";
 
 export type OvernightContentInput = {
   request: DecisionRequest;
@@ -26,75 +20,51 @@ export type OvernightContentResult = {
 };
 
 export class OvernightContent {
-  generate(
+  async generate(
     input: OvernightContentInput,
-  ): OvernightContentResult {
-    if (
-      !contentIntelligenceEngine.shouldGenerate(
-        input.decision,
-      )
-    ) {
+  ): Promise<OvernightContentResult> {
+    if (!contentIntelligenceEngine.shouldGenerate(input.decision)) {
       return {
         contentPackage: null,
         reviewItemId: null,
       };
     }
 
-    const contentPackage =
-      contentIntelligenceEngine.generate({
-        decision:
-          input.decision,
+    const contentPackage = await contentIntelligenceEngine.generate({
+      decision: input.decision,
 
-        businessName:
-          input.request.businessName ??
-          input.request.businessProfile
-            ?.businessName,
+      businessName:
+        input.request.businessName ??
+        input.request.businessProfile?.businessName,
 
-        ownerName:
-          input.request.ownerName ??
-          input.request.businessProfile
-            ?.ownerName,
+      ownerName:
+        input.request.ownerName ?? input.request.businessProfile?.ownerName,
 
-        products:
-          input.request.products ??
-          input.request.businessProfile
-            ?.products,
+      products:
+        input.request.products ?? input.request.businessProfile?.products,
 
-        offers:
-          input.request.offers ??
-          input.request.businessProfile
-            ?.services,
+      offers: input.request.offers ?? input.request.businessProfile?.services,
 
-        targetAudience:
-          input.request.targetAudience ??
-          input.request.businessProfile
-            ?.targetAudience,
+      targetAudience:
+        input.request.targetAudience ??
+        input.request.businessProfile?.targetAudience,
 
-        connectedPlatforms:
-          input.request.connectedPlatforms ??
-          input.request.businessProfile
-            ?.platforms,
+      connectedPlatforms:
+        input.request.connectedPlatforms ??
+        input.request.businessProfile?.platforms,
 
-        brandVoice:
-          input.request.businessProfile
-            ?.brandVoice,
+      brandVoice: input.request.businessProfile?.brandVoice,
 
-        preferredFormat:
-          "faceless_video",
-      });
+      preferredFormat: "faceless_video",
+    });
 
-    const reviewItem =
-      reviewQueueStore.addContentPackage(
-        contentPackage,
-      );
+    const reviewItem = await reviewQueueStore.addContentPackage(contentPackage);
 
     return {
       contentPackage,
-      reviewItemId:
-        reviewItem.id,
+      reviewItemId: reviewItem.id,
     };
   }
 }
 
-export const overnightContent =
-  new OvernightContent();
+export const overnightContent = new OvernightContent();

@@ -1,4 +1,4 @@
-import { db } from "./database/database";
+import { getDatabase } from "./database/database";
 
 export type MemoryType =
   | "identity"
@@ -12,11 +12,7 @@ export type MemoryType =
   | "preference"
   | "relationship";
 
-export type MemoryImportance =
-  | "low"
-  | "medium"
-  | "high"
-  | "critical";
+export type MemoryImportance = "low" | "medium" | "high" | "critical";
 
 export type Memory = {
   id: string;
@@ -42,12 +38,7 @@ export type ActiveWork = {
   lastCompletedStep: string;
   currentBlocker?: string;
   nextStep: string;
-  status:
-    | "planned"
-    | "working"
-    | "blocked"
-    | "waiting"
-    | "completed";
+  status: "planned" | "working" | "blocked" | "waiting" | "completed";
   updatedAt: string;
 };
 
@@ -62,30 +53,37 @@ type MemoryRow = {
   lastUsed: string | null;
 };
 
-const ACTIVE_WORK_MEMORY_ID =
-  "kai-active-work";
+const ACTIVE_WORK_MEMORY_ID = "kai-active-work";
 
-function parseTags(
-  value: string,
-): string[] {
+const GENERIC_RECALL_TAGS = new Set([
+  "business",
+  "cognitive-session",
+  "decision",
+  "experience",
+  "learning",
+  "project",
+  "result",
+  "success",
+  "partial",
+  "failure",
+  "work",
+]);
+
+const RECALL_LIMIT = 12;
+
+function parseTags(value: string): string[] {
   try {
-    const parsed: unknown =
-      JSON.parse(value);
+    const parsed: unknown = JSON.parse(value);
 
     return Array.isArray(parsed)
-      ? parsed.filter(
-          (tag): tag is string =>
-            typeof tag === "string",
-        )
+      ? parsed.filter((tag): tag is string => typeof tag === "string")
       : [];
   } catch {
     return [];
   }
 }
 
-function rowToMemory(
-  row: MemoryRow,
-): Memory {
+function rowToMemory(row: MemoryRow): Memory {
   return {
     id: row.id,
     type: row.type,
@@ -93,61 +91,79 @@ function rowToMemory(
     description: row.description,
     importance: row.importance,
     learnedAt: row.learnedAt,
-    lastUsed:
-      row.lastUsed ?? undefined,
+    lastUsed: row.lastUsed ?? undefined,
     tags: parseTags(row.tags),
   };
 }
 
-function normalizeTags(
-  tags: string[],
-): string[] {
+function normalizeTags(tags: string[]): string[] {
   return Array.from(
-    new Set(
-      tags
-        .map((tag) =>
-          tag.trim().toLowerCase(),
-        )
-        .filter(Boolean),
-    ),
+    new Set(tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean)),
   );
 }
 
-function activeWorkToDescription(
-  work: ActiveWork,
-): string {
+function meaningfulTokens(values: string[]): Set<string> {
+  return new Set(
+    values
+      .flatMap((value) => value.toLowerCase().split(/[^a-z0-9]+/))
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 4 && !GENERIC_RECALL_TAGS.has(token)),
+  );
+}
+
+function relevanceScore(memory: Memory, requestedTags: string[]): number {
+  const specificRequestedTags = requestedTags.filter(
+    (tag) => !GENERIC_RECALL_TAGS.has(tag),
+  );
+
+  const exactMatches = specificRequestedTags.filter((tag) =>
+    memory.tags.includes(tag),
+  ).length;
+
+  const requestedTokens = meaningfulTokens(specificRequestedTags);
+
+  const memoryTokens = meaningfulTokens([
+    memory.title,
+    memory.description,
+    ...memory.tags,
+  ]);
+
+  const tokenMatches = Array.from(requestedTokens).filter((token) =>
+    memoryTokens.has(token),
+  ).length;
+
+  if (exactMatches === 0 && tokenMatches < 2) {
+    return 0;
+  }
+
+  const importanceWeight =
+    memory.importance === "critical"
+      ? 4
+      : memory.importance === "high"
+        ? 3
+        : memory.importance === "medium"
+          ? 2
+          : 1;
+
+  return exactMatches * 20 + tokenMatches * 5 + importanceWeight;
+}
+
+function activeWorkToDescription(work: ActiveWork): string {
   return JSON.stringify(work);
 }
 
-function descriptionToActiveWork(
-  description: string,
-): ActiveWork | null {
+function descriptionToActiveWork(description: string): ActiveWork | null {
   try {
-    const parsed =
-      JSON.parse(
-        description,
-      ) as Partial<ActiveWork>;
+    const parsed = JSON.parse(description) as Partial<ActiveWork>;
 
     if (
-      typeof parsed.project !==
-        "string" ||
-      typeof parsed.release !==
-        "string" ||
-      typeof parsed.mission !==
-        "string" ||
-      typeof parsed.lastCompletedStep !==
-        "string" ||
-      typeof parsed.nextStep !==
-        "string" ||
-      typeof parsed.updatedAt !==
-        "string" ||
-      ![
-        "planned",
-        "working",
-        "blocked",
-        "waiting",
-        "completed",
-      ].includes(
+      typeof parsed.project !== "string" ||
+      typeof parsed.release !== "string" ||
+      typeof parsed.mission !== "string" ||
+      typeof parsed.lastCompletedStep !== "string" ||
+      typeof parsed.nextStep !== "string" ||
+      typeof parsed.updatedAt !== "string" ||
+      !["planned", "working", "blocked", "waiting", "completed"].includes(
         parsed.status ?? "",
       )
     ) {
@@ -158,16 +174,13 @@ function descriptionToActiveWork(
       project: parsed.project,
       release: parsed.release,
       mission: parsed.mission,
-      lastCompletedStep:
-        parsed.lastCompletedStep,
+      lastCompletedStep: parsed.lastCompletedStep,
       currentBlocker:
-        typeof parsed.currentBlocker ===
-        "string"
+        typeof parsed.currentBlocker === "string"
           ? parsed.currentBlocker
           : undefined,
       nextStep: parsed.nextStep,
-      status:
-        parsed.status as ActiveWork["status"],
+      status: parsed.status as ActiveWork["status"],
       updatedAt: parsed.updatedAt,
     };
   } catch {
@@ -176,11 +189,17 @@ function descriptionToActiveWork(
 }
 
 export class MemoryBrain {
-  remember(
-    memory: Memory,
-  ): void {
-    db.prepare(
-      `
+  async forget(id: string): Promise<void> {
+    await getDatabase()
+      .prepare(`DELETE FROM memories WHERE id = ?`)
+      .bind(id)
+      .run();
+  }
+
+  async remember(memory: Memory): Promise<void> {
+    await getDatabase()
+      .prepare(
+        `
       INSERT OR REPLACE INTO memories
       (
         id,
@@ -195,41 +214,32 @@ export class MemoryBrain {
       VALUES
       (?, ?, ?, ?, ?, ?, ?, ?)
       `,
-    ).run(
-      memory.id,
-      memory.type,
-      memory.title,
-      memory.description,
-      memory.importance,
-      JSON.stringify(
-        normalizeTags(
-          memory.tags,
-        ),
-      ),
-      memory.learnedAt,
-      new Date().toISOString(),
-    );
+      )
+      .bind(
+        memory.id,
+        memory.type,
+        memory.title,
+        memory.description,
+        memory.importance,
+        JSON.stringify(normalizeTags(memory.tags)),
+        memory.learnedAt,
+        new Date().toISOString(),
+      )
+      .run();
   }
 
-  recall(
-    tags: string[],
-  ): MemorySearchResult {
-    const normalizedTags =
-      normalizeTags(tags);
+  async recall(tags: string[]): Promise<MemorySearchResult> {
+    const normalizedTags = normalizeTags(tags);
 
-    if (
-      normalizedTags.length === 0
-    ) {
+    if (normalizedTags.length === 0) {
       return {
         memories: [],
         confidence: 0,
-        missingKnowledge: [
-          "No memory search tags were supplied.",
-        ],
+        missingKnowledge: ["No memory search tags were supplied."],
       };
     }
 
-    const rows = db
+    const { results: rows = [] } = await getDatabase()
       .prepare(
         `
         SELECT *
@@ -244,18 +254,39 @@ export class MemoryBrain {
           learnedAt DESC
         `,
       )
-      .all() as MemoryRow[];
+      .all<MemoryRow>();
 
-    const memories = rows
+    const rankedMemories = rows
       .map(rowToMemory)
-      .filter((memory) =>
-        normalizedTags.some(
-          (tag) =>
-            memory.tags.includes(
-              tag,
-            ),
-        ),
+      .map((memory) => ({
+        memory,
+        score: relevanceScore(memory, normalizedTags),
+      }))
+      .filter(({ score }) => score > 0)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, RECALL_LIMIT);
+
+    const memories = rankedMemories.map(({ memory }) => memory);
+
+    if (memories.length > 0) {
+      const usedAt = new Date().toISOString();
+
+      const database = getDatabase();
+      const statements = memories.map((memory) =>
+        database
+          .prepare(
+            `
+          UPDATE memories
+          SET lastUsed = ?
+          WHERE id = ?
+          `,
+          )
+          .bind(usedAt, memory.id),
       );
+      await database.batch(statements);
+    }
+
+    const strongestScore = rankedMemories[0]?.score ?? 0;
 
     return {
       memories,
@@ -263,22 +294,16 @@ export class MemoryBrain {
         memories.length > 0
           ? Math.min(
               100,
-              60 +
-                memories.length *
-                  5,
+              50 + strongestScore + Math.min(memories.length, 5) * 3,
             )
           : 0,
       missingKnowledge:
-        memories.length > 0
-          ? []
-          : [
-              "No relevant memories found.",
-            ],
+        memories.length > 0 ? [] : ["No relevant memories found."],
     };
   }
 
-  all(): Memory[] {
-    const rows = db
+  async all(): Promise<Memory[]> {
+    const { results: rows = [] } = await getDatabase()
       .prepare(
         `
         SELECT *
@@ -286,37 +311,26 @@ export class MemoryBrain {
         ORDER BY learnedAt DESC
         `,
       )
-      .all() as MemoryRow[];
+      .all<MemoryRow>();
 
-    return rows.map(
-      rowToMemory,
-    );
+    return rows.map(rowToMemory);
   }
 
-  setActiveWork(
-    input: Omit<
-      ActiveWork,
-      "updatedAt"
-    >,
-  ): ActiveWork {
+  async setActiveWork(
+    input: Omit<ActiveWork, "updatedAt">,
+  ): Promise<ActiveWork> {
     const activeWork: ActiveWork = {
       ...input,
-      updatedAt:
-        new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
-    this.remember({
+    await this.remember({
       id: ACTIVE_WORK_MEMORY_ID,
       type: "work",
-      title:
-        `${activeWork.project} — ${activeWork.release}`,
-      description:
-        activeWorkToDescription(
-          activeWork,
-        ),
+      title: `${activeWork.project} — ${activeWork.release}`,
+      description: activeWorkToDescription(activeWork),
       importance: "critical",
-      learnedAt:
-        activeWork.updatedAt,
+      learnedAt: activeWork.updatedAt,
       tags: [
         "active-work",
         "current-project",
@@ -329,10 +343,8 @@ export class MemoryBrain {
     return activeWork;
   }
 
-  getActiveWork():
-    | ActiveWork
-    | null {
-    const row = db
+  async getActiveWork(): Promise<ActiveWork | null> {
+    const row = await getDatabase()
       .prepare(
         `
         SELECT *
@@ -341,41 +353,38 @@ export class MemoryBrain {
         LIMIT 1
         `,
       )
-      .get(
-        ACTIVE_WORK_MEMORY_ID,
-      ) as MemoryRow | undefined;
+      .bind(ACTIVE_WORK_MEMORY_ID)
+      .first<MemoryRow>();
 
     if (!row) {
       return null;
     }
 
-    db.prepare(
-      `
+    await getDatabase()
+      .prepare(
+        `
       UPDATE memories
       SET lastUsed = ?
       WHERE id = ?
       `,
-    ).run(
-      new Date().toISOString(),
-      ACTIVE_WORK_MEMORY_ID,
-    );
+      )
+      .bind(new Date().toISOString(), ACTIVE_WORK_MEMORY_ID)
+      .run();
 
-    return descriptionToActiveWork(
-      row.description,
-    );
+    return descriptionToActiveWork(row.description);
   }
 
-  clearActiveWork(): void {
-    db.prepare(
-      `
+  async clearActiveWork(): Promise<void> {
+    await getDatabase()
+      .prepare(
+        `
       DELETE FROM memories
       WHERE id = ?
       `,
-    ).run(
-      ACTIVE_WORK_MEMORY_ID,
-    );
+      )
+      .bind(ACTIVE_WORK_MEMORY_ID)
+      .run();
   }
 }
 
-export const memoryBrain =
-  new MemoryBrain();
+export const memoryBrain = new MemoryBrain();

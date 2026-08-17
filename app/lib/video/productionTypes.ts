@@ -3,6 +3,10 @@ import type {
   VideoProductionPackage,
   VideoScene,
 } from "../../remotion/types";
+import type { AdaptiveCreationPlan } from "../AdaptiveContentCreationBrain";
+import type { VideoExperimentDirective } from "../VideoExperimentPlanner";
+import type { CreativeWinnerDirective } from "../CreativeWinnerSystem";
+import type { CreativePortfolioDirective } from "../CreativePortfolioManager";
 
 export type ProductionStatus =
   | "planning"
@@ -16,6 +20,17 @@ export type ProductionStatus =
 export type ProductionRequest = {
   videoId: string;
   topic: string;
+  productName?: string;
+  offerDescription?: string;
+  audience?: string;
+  destination?: string;
+  productAssetUrls?: string[];
+  creativeApproach?: "emotional_story" | "problem_solution" | "product_demonstration";
+  minimumQualityScore?: number;
+  adaptiveCreation?: AdaptiveCreationPlan;
+  videoExperiment?: VideoExperimentDirective;
+  creativeWinner?: CreativeWinnerDirective;
+  creativePortfolio?: CreativePortfolioDirective;
 };
 
 export type ProductionRenderRequest = {

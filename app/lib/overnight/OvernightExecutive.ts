@@ -3,10 +3,7 @@ import {
   type DepartmentReviewResult,
 } from "../DepartmentRegistry";
 
-import {
-  executiveBrain,
-  type ExecutiveReview,
-} from "../ExecutiveBrain";
+import { executiveBrain, type ExecutiveReview } from "../ExecutiveBrain";
 
 import {
   organizationMemory,
@@ -18,13 +15,9 @@ import {
   type OrganizationInsightsResult,
 } from "../organization";
 
-import type {
-  DecisionResponse,
-} from "../DecisionCore";
+import type { DecisionResponse } from "../DecisionCore";
 
-import type {
-  ActiveWork,
-} from "../MemoryBrain";
+import type { ActiveWork } from "../MemoryBrain";
 
 export type OvernightExecutiveResult = {
   departmentReview: DepartmentReviewResult;
@@ -42,40 +35,29 @@ export class OvernightExecutive {
   async review(
     input: OvernightExecutiveInput,
   ): Promise<OvernightExecutiveResult> {
-    const departmentReview =
-      await departmentRegistry.reviewAll();
+    const departmentReview = await departmentRegistry.reviewAll();
 
-    const organizationSnapshot =
-      organizationMemory.recordOrganization(
-        departmentReview.reports,
-      );
+    const organizationSnapshot = await organizationMemory.recordOrganization(
+      departmentReview.reports,
+    );
 
-    const insights =
-      organizationInsights.analyze(
-        organizationSnapshot,
-      );
+    const insights = organizationInsights.analyze(organizationSnapshot);
 
-    const executiveReview =
-      executiveBrain.review({
-        decision:
-          input.decisionResult,
+    const executiveReview = executiveBrain.review({
+      decision: input.decisionResult,
 
-        activeWork:
-          input.activeWork,
+      activeWork: input.activeWork,
 
-        departments:
-          departmentReview.reports,
-      });
+      departments: departmentReview.reports,
+    });
 
     return {
       departmentReview,
       organizationSnapshot,
-      organizationInsights:
-        insights,
+      organizationInsights: insights,
       executiveReview,
     };
   }
 }
 
-export const overnightExecutive =
-  new OvernightExecutive();
+export const overnightExecutive = new OvernightExecutive();

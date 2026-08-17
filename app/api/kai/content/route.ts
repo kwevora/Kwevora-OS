@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { defaultMemory } from "../../../lib/kaiMemory";
+import { crossPlatformLearningBrain } from "../../../lib/CrossPlatformLearningBrain";
 
 import type {
   VideoCameraMovement,
@@ -10,10 +11,7 @@ import type {
   VideoTextPosition,
 } from "../../../remotion/types";
 
-type ContentFormat =
-  | "faceless_video"
-  | "record_yourself"
-  | "upload_video";
+type ContentFormat = "faceless_video" | "record_yourself" | "upload_video";
 
 type LegacyVideoPlan = {
   openingText: string;
@@ -144,8 +142,7 @@ function extractJson(text: string): unknown {
 
 function isStringArray(value: unknown): value is string[] {
   return (
-    Array.isArray(value) &&
-    value.every((item) => typeof item === "string")
+    Array.isArray(value) && value.every((item) => typeof item === "string")
   );
 }
 
@@ -164,23 +161,18 @@ function isNumberBetween(
 
 function isCameraShot(value: unknown): value is VideoCameraShot {
   return (
-    typeof value === "string" &&
-    CAMERA_SHOTS.includes(value as VideoCameraShot)
+    typeof value === "string" && CAMERA_SHOTS.includes(value as VideoCameraShot)
   );
 }
 
-function isCameraMovement(
-  value: unknown,
-): value is VideoCameraMovement {
+function isCameraMovement(value: unknown): value is VideoCameraMovement {
   return (
     typeof value === "string" &&
     CAMERA_MOVEMENTS.includes(value as VideoCameraMovement)
   );
 }
 
-function isSceneTransition(
-  value: unknown,
-): value is VideoSceneTransition {
+function isSceneTransition(value: unknown): value is VideoSceneTransition {
   return (
     typeof value === "string" &&
     SCENE_TRANSITIONS.includes(value as VideoSceneTransition)
@@ -212,58 +204,40 @@ function isVideoScene(value: unknown): value is VideoScene {
     scene.durationInFrames <= 450 &&
     (scene.supportingText === undefined ||
       typeof scene.supportingText === "string") &&
-    (scene.narration === undefined ||
-      typeof scene.narration === "string") &&
+    (scene.narration === undefined || typeof scene.narration === "string") &&
     (scene.backgroundColor === undefined ||
       typeof scene.backgroundColor === "string") &&
-    (scene.visual === undefined ||
-      typeof scene.visual === "string") &&
+    (scene.visual === undefined || typeof scene.visual === "string") &&
     (scene.visualPrompt === undefined ||
       typeof scene.visualPrompt === "string") &&
     (scene.imagePrompt === undefined ||
       typeof scene.imagePrompt === "string") &&
-    (scene.bRollKeywords === undefined ||
-      isStringArray(scene.bRollKeywords)) &&
-    (scene.imageUrl === undefined ||
-      typeof scene.imageUrl === "string") &&
-    (scene.videoUrl === undefined ||
-      typeof scene.videoUrl === "string") &&
-    (scene.cameraShot === undefined ||
-      isCameraShot(scene.cameraShot)) &&
+    (scene.bRollKeywords === undefined || isStringArray(scene.bRollKeywords)) &&
+    (scene.imageUrl === undefined || typeof scene.imageUrl === "string") &&
+    (scene.videoUrl === undefined || typeof scene.videoUrl === "string") &&
+    (scene.cameraShot === undefined || isCameraShot(scene.cameraShot)) &&
     (scene.cameraMovement === undefined ||
       isCameraMovement(scene.cameraMovement)) &&
-    (scene.transition === undefined ||
-      isSceneTransition(scene.transition)) &&
-    (scene.emotion === undefined ||
-      typeof scene.emotion === "string") &&
-    (scene.lighting === undefined ||
-      typeof scene.lighting === "string") &&
-    (scene.colorMood === undefined ||
-      typeof scene.colorMood === "string") &&
+    (scene.transition === undefined || isSceneTransition(scene.transition)) &&
+    (scene.emotion === undefined || typeof scene.emotion === "string") &&
+    (scene.lighting === undefined || typeof scene.lighting === "string") &&
+    (scene.colorMood === undefined || typeof scene.colorMood === "string") &&
     (scene.backgroundStyle === undefined ||
       typeof scene.backgroundStyle === "string") &&
-    (scene.textPosition === undefined ||
-      isTextPosition(scene.textPosition)) &&
+    (scene.textPosition === undefined || isTextPosition(scene.textPosition)) &&
     (scene.thumbnailPrompt === undefined ||
       typeof scene.thumbnailPrompt === "string") &&
     (scene.thumbnailTitle === undefined ||
       typeof scene.thumbnailTitle === "string") &&
-    (scene.musicMood === undefined ||
-      typeof scene.musicMood === "string") &&
-    (scene.soundEffects === undefined ||
-      isStringArray(scene.soundEffects)) &&
-    (scene.cta === undefined ||
-      typeof scene.cta === "string") &&
-    (scene.hashtags === undefined ||
-      isStringArray(scene.hashtags)) &&
+    (scene.musicMood === undefined || typeof scene.musicMood === "string") &&
+    (scene.soundEffects === undefined || isStringArray(scene.soundEffects)) &&
+    (scene.cta === undefined || typeof scene.cta === "string") &&
+    (scene.hashtags === undefined || isStringArray(scene.hashtags)) &&
     (scene.confidence === undefined ||
       isNumberBetween(scene.confidence, 0, 100)) &&
-    (scene.audience === undefined ||
-      typeof scene.audience === "string") &&
-    (scene.objective === undefined ||
-      typeof scene.objective === "string") &&
-    (scene.reasoning === undefined ||
-      typeof scene.reasoning === "string")
+    (scene.audience === undefined || typeof scene.audience === "string") &&
+    (scene.objective === undefined || typeof scene.objective === "string") &&
+    (scene.reasoning === undefined || typeof scene.reasoning === "string")
   );
 }
 
@@ -274,8 +248,7 @@ function isVideoProductionPackage(
     return false;
   }
 
-  const productionPackage =
-    value as Partial<VideoProductionPackage>;
+  const productionPackage = value as Partial<VideoProductionPackage>;
 
   return (
     typeof productionPackage.title === "string" &&
@@ -300,11 +273,7 @@ function isVideoProductionPackage(
     typeof productionPackage.reasoning === "string" &&
     productionPackage.reasoning.trim().length > 0 &&
     isNumberBetween(productionPackage.confidence, 0, 100) &&
-    isNumberBetween(
-      productionPackage.estimatedLengthSeconds,
-      15,
-      45,
-    ) &&
+    isNumberBetween(productionPackage.estimatedLengthSeconds, 15, 45) &&
     isStringArray(productionPackage.recommendedPlatforms) &&
     productionPackage.recommendedPlatforms.length > 0 &&
     Array.isArray(productionPackage.scenes) &&
@@ -314,9 +283,7 @@ function isVideoProductionPackage(
   );
 }
 
-function isLegacyVideoPlan(
-  value: unknown,
-): value is LegacyVideoPlan {
+function isLegacyVideoPlan(value: unknown): value is LegacyVideoPlan {
   if (!value || typeof value !== "object") {
     return false;
   }
@@ -383,10 +350,9 @@ export async function POST(request: Request) {
 
     const incomingMemory = normalizeIncomingMemory(body.memory);
 
-    const memory = [
-      ...defaultMemory.items,
-      ...incomingMemory,
-    ];
+    const memory = [...defaultMemory.items, ...incomingMemory];
+    const verifiedPerformancePlaybook =
+      await crossPlatformLearningBrain.promptContext();
 
     const apiKey = process.env.OPENAI_API_KEY;
 
@@ -454,6 +420,18 @@ Do not contradict high-confidence memory unless newer information
 clearly replaces it.
 
 ${JSON.stringify(memory, null, 2)}
+
+VERIFIED CROSS-PLATFORM PERFORMANCE PLAYBOOK:
+${JSON.stringify(verifiedPerformancePlaybook, null, 2)}
+
+PERFORMANCE LEARNING RULES:
+- Apply only patterns listed under repeat.
+- Avoid patterns listed under avoid unless the new idea has a clearly different reason.
+- Never treat a learning pattern or a single result as proven.
+- Preserve platform-specific lessons; a TikTok result does not automatically prove the same choice on YouTube.
+- When changing a weak pattern, change one meaningful variable so KAI can learn what caused the next result.
+- Do not copy an old hook word-for-word. Reuse the proven structure or style with a fresh idea.
+- If verifiedPublications is zero, use current creative standards and do not claim performance evidence.
 
 YOUR TASK:
 Create exactly 3 strong and meaningfully different short-form content ideas.
@@ -733,26 +711,23 @@ Return ONLY valid JSON using this exact structure:
 }
 `;
 
-    const response = await fetch(
-      "https://api.openai.com/v1/responses",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-4.1-mini",
-          input: prompt,
-          temperature: 0.8,
-          text: {
-            format: {
-              type: "json_object",
-            },
-          },
-        }),
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify({
+        model: "gpt-4.1-mini",
+        input: prompt,
+        temperature: 0.8,
+        text: {
+          format: {
+            type: "json_object",
+          },
+        },
+      }),
+    });
 
     const data: unknown = await response.json();
 
@@ -792,9 +767,7 @@ Return ONLY valid JSON using this exact structure:
     const parsedIdeas = (parsed as { ideas?: unknown }).ideas;
 
     if (!Array.isArray(parsedIdeas)) {
-      throw new Error(
-        "The AI response did not include an ideas array.",
-      );
+      throw new Error("The AI response did not include an ideas array.");
     }
 
     const validIdeas = parsedIdeas
@@ -803,8 +776,7 @@ Return ONLY valid JSON using this exact structure:
         (idea) =>
           idea.videoPlan.estimatedLengthSeconds ===
             idea.productionPackage.estimatedLengthSeconds &&
-          idea.productionPackage.scenes.length ===
-            idea.videoPlan.scenes.length,
+          idea.productionPackage.scenes.length === idea.videoPlan.scenes.length,
       )
       .slice(0, 3);
 
@@ -817,9 +789,7 @@ Return ONLY valid JSON using this exact structure:
     return NextResponse.json({
       success: true,
       ideas: validIdeas,
-      productionPackages: validIdeas.map(
-        (idea) => idea.productionPackage,
-      ),
+      productionPackages: validIdeas.map((idea) => idea.productionPackage),
       memoryItemsUsed: memory.length,
       generatedAt: new Date().toISOString(),
       source: "kai-production-content-brain-with-memory",

@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 const YOUTUBE_SCOPES = [
   "https://www.googleapis.com/auth/youtube.upload",
   "https://www.googleapis.com/auth/youtube.readonly",
+  "https://www.googleapis.com/auth/yt-analytics.readonly",
 ];
 
 export async function GET(request: Request) {

@@ -58,7 +58,7 @@ export async function generateSceneImage(
     model,
     prompt,
     size: "1024x1536",
-    quality: "low",
+    quality: "high",
     output_format: "png",
     n: 1,
   });
