@@ -118,7 +118,10 @@ function createProductFirstFallback(
   scenes: VideoScene[],
   productAssetUrls: string[],
 ): VideoScene[] {
-  const productProofIndexes = new Set([2, 4, 6]);
+  // Keep the product on screen through the full demonstration body. The
+  // opening and CTA remain animated context beats; everything between them
+  // must prove the offer visually.
+  const productProofIndexes = new Set([1, 2, 3, 4, 5, 6]);
   const productMovements: VideoScene["cameraMovement"][] = [
     "slow-push-in",
     "pan-left",
