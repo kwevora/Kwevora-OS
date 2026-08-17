@@ -297,7 +297,7 @@ function findTaskId(value: unknown): string | undefined {
 }
 
 function outputFailed(value: unknown) {
-  const text = JSON.stringify(value).toLowerCase();
+  const text = String(JSON.stringify(value) ?? "").toLowerCase();
   return /"status"\s*:\s*"(?:failed|error|cancelled)"/.test(text);
 }
 
