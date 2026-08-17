@@ -24,10 +24,12 @@ export function enforcePremiumVideoQuality(input: { scenes: VideoScene[]; music?
   input.scenes.forEach((scene, index) => {
     const isProductProof = scene.metadata?.productProof === true;
     if (isProductProof && !scene.videoUrl && !scene.imageUrl) failures.push(`Scene ${index + 1} has no uploaded product proof.`);
+    const hasDesignedFacelessMotion =
+      scene.metadata?.designedFacelessMotion === true &&
+      typeof scene.metadata?.visualTreatment === "string" &&
+      scene.metadata.visualTreatment.trim().length > 0;
     const hasDirectedFacelessMotion =
-      Boolean(scene.videoUrl) ||
-      scene.metadata?.motionGenerated === true ||
-      scene.metadata?.motionSelectedByKai === true;
+      Boolean(scene.videoUrl) || hasDesignedFacelessMotion;
     if (!isProductProof && !hasDirectedFacelessMotion) {
       failures.push(`Scene ${index + 1} has no directed faceless motion treatment.`);
     }
@@ -55,7 +57,11 @@ export function enforcePremiumVideoQuality(input: { scenes: VideoScene[]; music?
   if (narrationUrls.size !== 1) failures.push("The finished cut does not contain one continuous narration master.");
   if (!input.music?.url.includes("-kai-original.wav")) failures.push("The soundtrack was not created uniquely for this campaign.");
   const visualKeys = new Set(input.scenes.map((scene) =>
-    scene.videoUrl || (scene.imageUrl ? `${scene.imageUrl}:${scene.cameraShot}:${scene.cameraMovement}` : "") || (scene.metadata?.motionGenerated === true ? `generated:${scene.id}` : "")
+    scene.videoUrl ||
+    (scene.imageUrl ? `${scene.imageUrl}:${scene.cameraShot}:${scene.cameraMovement}` : "") ||
+    (scene.metadata?.designedFacelessMotion === true
+      ? `designed:${String(scene.metadata?.visualTreatment ?? "")}:${scene.id}`
+      : "")
   ).filter(Boolean));
   if (visualKeys.size < Math.min(4, input.scenes.length)) failures.push("The campaign does not contain enough visual variety.");
   const rawMediaUsage = new Map<string, number>();
