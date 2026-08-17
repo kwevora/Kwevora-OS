@@ -32,6 +32,14 @@ type YouTubeStatusResponse = {
   channelName?: string;
 };
 
+type OpenArtStatusResponse = {
+  success?: boolean;
+  connected?: boolean;
+  authenticated?: boolean;
+  refreshAvailable?: boolean;
+  connectedAt?: string;
+};
+
 const platforms: Platform[] = [
   {
     id: "youtube",
@@ -148,6 +156,41 @@ export default function SettingsPage() {
     true,
   );
 
+  const [
+    openArtConnected,
+    setOpenArtConnected,
+  ] = useState(
+    false,
+  );
+
+  const [
+    openArtAuthenticated,
+    setOpenArtAuthenticated,
+  ] = useState(
+    false,
+  );
+
+  const [
+    openArtRefreshAvailable,
+    setOpenArtRefreshAvailable,
+  ] = useState(
+    false,
+  );
+
+  const [
+    openArtConnectedAt,
+    setOpenArtConnectedAt,
+  ] = useState(
+    "",
+  );
+
+  const [
+    openArtLoading,
+    setOpenArtLoading,
+  ] = useState(
+    true,
+  );
+
   useEffect(
     () => {
       const savedMode =
@@ -164,6 +207,20 @@ export default function SettingsPage() {
       }
 
       void loadYouTubeStatus();
+      void loadOpenArtStatus();
+
+      const connectionResult =
+        new URLSearchParams(window.location.search).get("openart");
+
+      if (connectionResult === "connected") {
+        setMessage("OpenArt connected. KAI can now use your OpenArt account.");
+        window.history.replaceState({}, "", "/settings");
+      } else if (connectionResult) {
+        setMessage(
+          "OpenArt could not be connected. Your existing KWEVORA settings were not changed.",
+        );
+        window.history.replaceState({}, "", "/settings");
+      }
     },
     [],
   );
@@ -267,6 +324,142 @@ export default function SettingsPage() {
     }
   }
 
+  async function loadOpenArtStatus() {
+    setOpenArtLoading(
+      true,
+    );
+
+    try {
+      const response =
+        await fetch(
+          "/api/openart/status",
+          {
+            method:
+              "GET",
+
+            cache:
+              "no-store",
+          },
+        );
+
+      const contentType = response.headers.get("content-type") ?? "";
+
+      if (!contentType.includes("application/json")) {
+        throw new Error(
+          "KWEVORA received an invalid OpenArt status response.",
+        );
+      }
+
+      const data =
+        (
+          await response.json()
+        ) as OpenArtStatusResponse;
+
+      if (
+        !response.ok ||
+        !data.success
+      ) {
+        throw new Error(
+          "KWEVORA could not check OpenArt connection status.",
+        );
+      }
+
+      setOpenArtConnected(
+        Boolean(
+          data.connected,
+        ),
+      );
+
+      setOpenArtAuthenticated(
+        Boolean(
+          data.authenticated,
+        ),
+      );
+
+      setOpenArtRefreshAvailable(
+        Boolean(
+          data.refreshAvailable,
+        ),
+      );
+
+      setOpenArtConnectedAt(
+        typeof data.connectedAt ===
+        "string"
+          ? data.connectedAt
+          : "",
+      );
+    } catch {
+      setOpenArtConnected(
+        false,
+      );
+
+      setOpenArtAuthenticated(
+        false,
+      );
+
+      setOpenArtRefreshAvailable(
+        false,
+      );
+
+      setOpenArtConnectedAt(
+        "",
+      );
+    } finally {
+      setOpenArtLoading(
+        false,
+      );
+    }
+  }
+
+  function connectOpenArt() {
+    window.location.href =
+      "/api/openart/connect";
+  }
+
+  async function disconnectOpenArt() {
+    setMessage(
+      "",
+    );
+
+    try {
+      const response =
+        await fetch(
+          "/api/openart/disconnect",
+          {
+            method:
+              "POST",
+          },
+        );
+
+      if (
+        !response.ok
+      ) {
+        throw new Error(
+          "KWEVORA could not disconnect OpenArt.",
+        );
+      }
+
+      await loadOpenArtStatus();
+
+      setMessage(
+        "OpenArt disconnected.",
+      );
+    } catch (
+      error
+    ) {
+      console.error(
+        "OpenArt disconnect failed:",
+        error,
+      );
+
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "KWEVORA could not disconnect OpenArt.",
+      );
+    }
+  }
+
   function chooseMode(
     newMode: string,
   ) {
@@ -334,9 +527,12 @@ export default function SettingsPage() {
   }
 
   const connectedCount =
-    youtubeConnected
+    (youtubeConnected
       ? 1
-      : 0;
+      : 0) +
+    (openArtConnected
+      ? 1
+      : 0);
 
   return (
     <main className="min-h-screen bg-[#07040f] p-8 text-white">
@@ -432,6 +628,113 @@ export default function SettingsPage() {
                 Save Voice Mode as your preference while voice
                 conversations are being developed.
               </p>
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-fuchsia-500/20 bg-fuchsia-500/5 p-8">
+          <div className="flex flex-wrap items-start justify-between gap-5">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.3em] text-fuchsia-300">
+                Creation Engine
+              </p>
+
+              <h2 className="mt-3 text-3xl font-black">
+                Connect OpenArt for professional AI video scenes.
+              </h2>
+
+              <p className="mt-3 max-w-3xl leading-7 text-gray-300">
+                KAI will use your OpenArt account and credits to create
+                realistic motion scenes, then assemble the finished ad
+                inside KWEVORA.
+              </p>
+            </div>
+
+            <PlatformStatus
+              available
+              connected={
+                openArtConnected
+              }
+              loading={
+                openArtLoading
+              }
+            />
+          </div>
+
+          <div className="mt-8 rounded-2xl border border-white/10 bg-black/20 p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-fuchsia-400/20 bg-fuchsia-400/10 text-2xl">
+                ∞
+              </div>
+
+              <div>
+                <h3 className="text-2xl font-black">
+                  OpenArt
+                </h3>
+
+                <p className="mt-2 leading-7 text-gray-300">
+                  Generate cinematic image-to-video and text-to-video
+                  footage with OpenArt&apos;s cloud models.
+                </p>
+              </div>
+            </div>
+
+            {openArtConnected ? (
+              <div className="mt-5 rounded-xl border border-green-400/20 bg-green-400/5 p-4">
+                <p className="font-black text-green-200">
+                  OpenArt is connected to KAI.
+                </p>
+
+                <p className="mt-2 text-sm text-gray-300">
+                  Access token:{" "}
+                  {openArtAuthenticated
+                    ? "Available"
+                    : "Refresh required"}
+                </p>
+
+                <p className="mt-1 text-sm text-gray-300">
+                  Refresh token:{" "}
+                  {openArtRefreshAvailable
+                    ? "Available"
+                    : "Not currently available"}
+                </p>
+
+                {openArtConnectedAt ? (
+                  <p className="mt-1 text-sm text-gray-400">
+                    Connected:{" "}
+                    {new Date(
+                      openArtConnectedAt,
+                    ).toLocaleString()}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  openArtConnected
+                ) {
+                  void disconnectOpenArt();
+                } else {
+                  connectOpenArt();
+                }
+              }}
+              disabled={
+                openArtLoading
+              }
+              className={
+                openArtConnected
+                  ? "mt-6 w-full rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-3 font-black text-red-200 transition hover:bg-red-500/20 disabled:opacity-60"
+                  : "mt-6 w-full rounded-xl bg-fuchsia-400 px-5 py-3 font-black text-black transition hover:bg-fuchsia-300 disabled:opacity-60"
+              }
+            >
+              {openArtLoading
+                ? "Checking OpenArt..."
+                : openArtConnected
+                  ? "Disconnect OpenArt"
+                  : "Connect OpenArt"}
             </button>
           </div>
         </section>
