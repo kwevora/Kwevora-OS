@@ -514,6 +514,58 @@ function getAtmosphere(scene: VideoScene) {
   };
 }
 
+function NarrationCaption({
+  scene,
+  localFrame,
+  sceneDuration,
+}: {
+  scene: VideoScene;
+  localFrame: number;
+  sceneDuration: number;
+}) {
+  const words = String(scene.narration ?? "").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return null;
+  const chunkSize = 4;
+  const chunkCount = Math.ceil(words.length / chunkSize);
+  const progress = Math.min(0.999, Math.max(0, localFrame / Math.max(1, sceneDuration)));
+  const chunkIndex = Math.min(chunkCount - 1, Math.floor(progress * chunkCount));
+  const chunk = words.slice(chunkIndex * chunkSize, chunkIndex * chunkSize + chunkSize);
+  const wordProgress = (progress * chunkCount) % 1;
+  const activeWord = Math.min(chunk.length - 1, Math.floor(wordProgress * chunk.length));
+
+  return (
+    <div style={{
+      position: "absolute",
+      left: 70,
+      right: 70,
+      bottom: 138,
+      display: "flex",
+      justifyContent: "center",
+      flexWrap: "wrap",
+      gap: "0 14px",
+      padding: "18px 24px",
+      borderRadius: 24,
+      background: "rgba(0,0,0,0.64)",
+      boxShadow: "0 14px 45px rgba(0,0,0,0.45)",
+      zIndex: 20,
+    }}>
+      {chunk.map((word, index) => (
+        <span key={`${chunkIndex}-${index}-${word}`} style={{
+          fontSize: 40,
+          lineHeight: 1.12,
+          fontWeight: 900,
+          letterSpacing: -0.8,
+          color: index === activeWord ? "#72F5D0" : "#FFFFFF",
+          textShadow: "0 4px 18px rgba(0,0,0,0.8)",
+          transform: index === activeWord ? "scale(1.07)" : "scale(1)",
+        }}>
+          {word}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function FacelessMotionLayer({ scene, localFrame, sceneDuration, width, height }: {
   scene: VideoScene;
   localFrame: number;
@@ -919,6 +971,10 @@ export default function SceneRenderer({
           </div> : null}
         </div>
       </AbsoluteFill>
+
+      {!isCallToAction ? (
+        <NarrationCaption scene={scene} localFrame={localFrame} sceneDuration={sceneDuration} />
+      ) : null}
 
       {isCallToAction ? (
         <div
