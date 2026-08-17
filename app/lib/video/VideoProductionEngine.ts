@@ -118,10 +118,14 @@ function createProductFirstFallback(
   scenes: VideoScene[],
   productAssetUrls: string[],
 ): VideoScene[] {
-  // Keep the product on screen through the full demonstration body. The
-  // opening and CTA remain animated context beats; everything between them
-  // must prove the offer visually.
-  const productProofIndexes = new Set([1, 2, 3, 4, 5, 6]);
+  // Match product coverage to the amount of truthful media available. One
+  // still may support a reveal and one detail treatment, but it must never be
+  // stretched across the entire commercial.
+  const productProofIndexes = productAssetUrls.length <= 1
+    ? new Set([3, 5])
+    : productAssetUrls.length <= 3
+      ? new Set([2, 4, 6])
+      : new Set([1, 2, 3, 4, 5, 6]);
   const productMovements: VideoScene["cameraMovement"][] = [
     "slow-push-in",
     "pan-left",
@@ -154,7 +158,9 @@ function createProductFirstFallback(
       };
     }
 
-    const assetUrl = productAssetUrls[index % productAssetUrls.length];
+    const assetUrl = productAssetUrls[
+      productSceneNumber % Math.max(1, productAssetUrls.length)
+    ];
     const assetIsVideo = Boolean(assetUrl?.match(/\.(mp4|webm|mov)(?:\?.*)?$/i));
     const cameraMovement = productMovements[productSceneNumber % productMovements.length];
     productSceneNumber += 1;
@@ -168,7 +174,8 @@ function createProductFirstFallback(
         visualSource: "product",
         productProof: true,
         productAssetUrl: assetUrl,
-        productAssetIndex: index % productAssetUrls.length,
+        productAssetIndex:
+          (productSceneNumber - 1) % Math.max(1, productAssetUrls.length),
         motionProvider: "product-first-fallback",
         motionGenerated: false,
         motionSelectedByKai: true,
@@ -237,6 +244,7 @@ function createProductionScenes(input: {
   audience: string;
   objective: string;
   callToAction: string;
+  destination: string;
   musicMood: string;
   confidence: number;
   reasoning: string;
@@ -267,9 +275,13 @@ function createProductionScenes(input: {
       productAssetUrl?.match(/\.(mp4|webm|mov)(?:\?.*)?$/i),
     );
 
+    const isCallToAction = scene.purpose === "call-to-action";
+
     return {
       id: sceneId,
-      text: directedHeadline(scene),
+      text: isCallToAction
+        ? "Click the link to get it"
+        : directedHeadline(scene),
       supportingText: "",
       narration: scene.narration,
       durationInFrames: Math.max(1, Math.round(scene.durationSeconds * 30)),
@@ -312,6 +324,7 @@ function createProductionScenes(input: {
         productAssetUrl,
         productAssetIndex: isProductProof ? productAssetIndex : undefined,
         productClipStartFrame: isProductProof && productAssetIsVideo ? index * 30 : undefined,
+        destination: input.destination,
       },
     };
   });
@@ -537,6 +550,7 @@ export async function produceVideo(
       audience: selectedConcept.plan.audience,
       objective,
       callToAction: selectedConcept.plan.callToAction,
+      destination: request.destination ?? "",
       musicMood: selectedConcept.plan.musicStyle,
       confidence: selectedConcept.confidence,
       reasoning,
