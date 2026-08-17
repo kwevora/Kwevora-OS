@@ -38,6 +38,22 @@ type GeneratedDirection = {
   scenes?: GeneratedScene[];
 };
 
+const PRODUCT_SHOTS: KaiCreativeScene["cameraShot"][] = [
+  "wide",
+  "over-the-shoulder",
+  "close-up",
+  "top-down",
+  "medium",
+];
+
+const PRODUCT_MOVEMENTS: KaiCreativeScene["cameraMovement"][] = [
+  "slow-push-in",
+  "pan-left",
+  "pan-right",
+  "tracking",
+  "static",
+];
+
 const PURPOSES: KaiCreativeScene["purpose"][] = [
   "hook",
   "problem",
@@ -201,6 +217,12 @@ function repairDirection(
         ? "uploaded product asset"
         : `${baseQuery || "small business creator working"} angle ${index + 1}`,
       durationSeconds: Number(generated.durationSeconds) || 3.5,
+      cameraShot: visualSource === "product"
+        ? PRODUCT_SHOTS[productSceneNumber % PRODUCT_SHOTS.length]
+        : generated.cameraShot,
+      cameraMovement: visualSource === "product"
+        ? PRODUCT_MOVEMENTS[productSceneNumber % PRODUCT_MOVEMENTS.length]
+        : generated.cameraMovement,
       visualSource,
       productAssetIndex: visualSource === "product"
         ? productSceneNumber++ % Math.max(1, input.productAssetCount)
