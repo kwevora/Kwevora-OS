@@ -56,6 +56,7 @@ next-env.d.ts
 
 # KAI runtime render artifacts
 /data/render-jobs/*.json
+/public/generated/
 /public/generated-audio/
 /public/generated-videos/
 /public/generated-motion/
