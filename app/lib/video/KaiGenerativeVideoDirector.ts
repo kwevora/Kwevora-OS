@@ -148,7 +148,7 @@ function requiredProductSceneCount(productAssetCount: number): number {
 function productSceneIndexes(productAssetCount: number): Set<number> {
   if (productAssetCount <= 1) return new Set([3, 5]);
   if (productAssetCount <= 3) return new Set([2, 4, 6]);
-  return new Set([1, 2, 3, 4, 5, 6]);
+  return new Set([1, 2, 3, 4, 5]);
 }
 
 function repairDirection(
@@ -175,9 +175,7 @@ function repairDirection(
     // Reference-grade product ads keep the offer on camera through the body
     // of the story. Only the opening hook and closing CTA may use context.
     const forceProductProof = requiredProductIndexes.has(index);
-    const visualSource = forceProductProof || generated.visualSource === "product"
-      ? "product"
-      : "stock";
+    const visualSource = forceProductProof ? "product" : "stock";
     const rawTitle = clean(generated.title, purpose);
     const rawOnScreenText = clean(generated.onScreenText);
     const title = BANNED_COPY.some((pattern) => pattern.test(rawTitle))
