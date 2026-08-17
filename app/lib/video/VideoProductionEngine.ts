@@ -701,6 +701,8 @@ export async function produceVideo(
         productName,
         audience,
         creativeApproach: request.creativeApproach ?? "product_demonstration",
+        productAssetUrls,
+        openArtAccessToken: request.openArtAccessToken,
         scenes: scenesForMotion,
         logger,
       });

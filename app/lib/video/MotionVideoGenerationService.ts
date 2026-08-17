@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { VideoScene } from "../../remotion/types";
+import { generateOpenArtVideo } from "./OpenArtMcpVideoService";
 
 type PexelsFile = { id: number; file_type: string; width: number; height: number; link: string };
 type PexelsVideo = { id: number; url: string; user?: { name?: string; url?: string }; video_files?: PexelsFile[] };
@@ -182,6 +183,8 @@ export async function generateMotionScenes(input: {
   productName: string;
   audience: string;
   creativeApproach: string;
+  productAssetUrls?: string[];
+  openArtAccessToken?: string;
   scenes: VideoScene[];
   logger?: (message: string) => void;
 }) {
@@ -192,6 +195,7 @@ export async function generateMotionScenes(input: {
   const completed: VideoScene[] = [];
   const failures: string[] = [];
   let generated = 0;
+  let openArtAttempts = 0;
 
   for (let index = 0; index < input.scenes.length; index += 1) {
     const scene = input.scenes[index];
@@ -203,6 +207,64 @@ export async function generateMotionScenes(input: {
     if (scene.metadata?.productProof === true) {
       completed.push(scene);
       continue;
+    }
+
+    if (input.openArtAccessToken && openArtAttempts < 3) {
+      openArtAttempts += 1;
+      const openArtPrompt = [
+        "Create one polished five-second vertical 9:16 commercial shot.",
+        `Scene purpose: ${scene.visual || scene.visualPrompt || scene.text || "human product-use moment"}.`,
+        `Spoken story context: ${scene.narration || scene.text || ""}.`,
+        `Product: ${input.productName}. Audience: ${input.audience}. Campaign approach: ${input.creativeApproach}.`,
+        "Use realistic adult human context, believable natural movement, cinematic lighting, clear subject action, and premium TikTok-ad pacing.",
+        "Do not generate titles, captions, logos, watermarks, interface text, deformed hands, duplicated people, or a talking-head presenter.",
+        "The shot must feel like genuine live-action footage and end on a clean frame suitable for a fast transition.",
+      ].join(" ");
+
+      input.logger?.(
+        `OpenArt is generating premium motion for scene ${index + 1}/${input.scenes.length}.`,
+      );
+      const openArt = await generateOpenArtVideo({
+        accessToken: input.openArtAccessToken,
+        prompt: openArtPrompt,
+        productAssetUrl: input.productAssetUrls?.find(\n          (url) => url.startsWith("https://") || url.startsWith("http://"),\n        ),
+      });
+
+      if (openArt.success) {
+        try {
+          const fileName = `${safeName(scene.id)}-openart-${openArtAttempts}.mp4`;
+          await writeFile(
+            path.join(outputDir, fileName),
+            await downloadVideo(openArt.videoUrl, "OpenArt"),
+          );
+          completed.push({
+            ...scene,
+            imageUrl: undefined,
+            videoUrl: `/generated/${folder}/${fileName}`,
+            metadata: {
+              ...scene.metadata,
+              visualSource: "openart-generated-video",
+              productProof: false,
+              motionProvider: "OpenArt",
+              motionGenerated: true,
+              motionSelectedByKai: true,
+              openArtTool: openArt.toolName,
+              openArtModel: openArt.model,
+              footageQuery: openArtPrompt,
+              stillFallbackAllowed: false,
+            },
+          });
+          generated += 1;
+          continue;
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "OpenArt footage download failed.";
+          failures.push(`Scene ${index + 1}: ${reason}`);
+          input.logger?.(`OpenArt clip could not be downloaded for scene ${index + 1}; KAI is trying free footage next.`);
+        }
+      } else {
+        failures.push(`Scene ${index + 1}: ${openArt.message}`);
+        input.logger?.(`OpenArt could not complete scene ${index + 1}; KAI is trying free footage next.`);
+      }
     }
 
     const primaryQuery = cleanQuery(scene, input.productName);

@@ -25,6 +25,7 @@ export type ProductionRequest = {
   audience?: string;
   destination?: string;
   productAssetUrls?: string[];
+  openArtAccessToken?: string;
   creativeApproach?: "emotional_story" | "problem_solution" | "product_demonstration";
   minimumQualityScore?: number;
   adaptiveCreation?: AdaptiveCreationPlan;
