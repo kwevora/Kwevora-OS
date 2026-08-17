@@ -49,6 +49,17 @@ function normalizeValue(value?: string) {
   return value?.trim().toLowerCase().replace(/_/g, "-") ?? "";
 }
 
+function displayDestination(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) return "";
+
+  try {
+    const url = new URL(value.trim());
+    return `${url.host}${url.pathname}`.replace(/\/$/, "");
+  } catch {
+    return value.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "");
+  }
+}
+
 function resolveSceneImageUrl(imageUrl?: string): string | null {
   const value = imageUrl?.trim();
 
@@ -593,6 +604,12 @@ export default function SceneRenderer({
   const sceneImageUrl = resolveSceneImageUrl(scene.imageUrl);
   const sceneVideoUrl = resolveSceneVideoUrl(scene.videoUrl);
   const isProductProof = scene.metadata?.productProof === true;
+  const isCallToAction = scene.metadata?.scenePurpose === "call-to-action";
+  const destination = displayDestination(scene.metadata?.destination);
+  const visibleHashtags = (scene.hashtags ?? [])
+    .map((hashtag) => hashtag.startsWith("#") ? hashtag : `#${hashtag}`)
+    .slice(0, 5)
+    .join("  ");
   const mediaClipStartFrame =
     typeof scene.metadata?.mediaClipStartFrame === "number"
       ? scene.metadata.mediaClipStartFrame
@@ -830,6 +847,42 @@ export default function SceneRenderer({
           </div> : null}
         </div>
       </AbsoluteFill>
+
+      {isCallToAction ? (
+        <div
+          style={{
+            position: "absolute",
+            left: 76,
+            right: 76,
+            bottom: 175,
+            padding: "26px 30px",
+            borderRadius: 28,
+            background: "rgba(0,0,0,0.72)",
+            border: "2px solid rgba(255,255,255,0.22)",
+            boxShadow: "0 22px 65px rgba(0,0,0,0.52)",
+            textAlign: "center",
+          }}
+        >
+          {destination ? (
+            <div style={{ fontSize: 34, fontWeight: 800, lineHeight: 1.15 }}>
+              {destination}
+            </div>
+          ) : null}
+          {visibleHashtags ? (
+            <div
+              style={{
+                marginTop: destination ? 16 : 0,
+                fontSize: 25,
+                fontWeight: 650,
+                color: "rgba(255,255,255,0.78)",
+                lineHeight: 1.25,
+              }}
+            >
+              {visibleHashtags}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div
         style={{
