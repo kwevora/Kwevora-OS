@@ -8,7 +8,7 @@ export function enforcePremiumVideoQuality(input: { scenes: VideoScene[]; music?
   const failures: string[] = [];
   if (input.scenes.length < 4) failures.push("The campaign needs at least four directed scenes.");
   const productProofScenes = input.scenes.filter((scene) => scene.metadata?.productProof === true);
-  if (productProofScenes.length < 3) failures.push("The campaign must show the real product in at least three scenes.");
+  if (productProofScenes.length < 5) failures.push("The campaign must keep the real product on camera for most of the ad.");
   input.scenes.forEach((scene, index) => {
     const isProductProof = scene.metadata?.productProof === true;
     const hasGeneratedMotion = scene.metadata?.motionGenerated === true;
@@ -28,11 +28,17 @@ export function enforcePremiumVideoQuality(input: { scenes: VideoScene[]; music?
   if (queries.length !== stockScenes.length || new Set(queries).size !== stockScenes.length) failures.push("The visual plan repeats or omits context-footage searches.");
   const visibleScenes = input.scenes.filter((scene) => Boolean(scene.text?.trim()) || Boolean(scene.supportingText?.trim()));
   if (visibleScenes.length > 3) failures.push("The edit relies on too many text cards instead of spoken storytelling.");
+  const averageSceneSeconds = input.scenes.reduce((total, scene) => total + scene.durationInFrames / 30, 0) / Math.max(1, input.scenes.length);
+  if (averageSceneSeconds > 4.5) failures.push("The edit changes visuals too slowly for a short-form product ad.");
+  const productShotPatterns = new Set(productProofScenes.map((scene) =>
+    `${scene.cameraShot ?? ""}:${scene.cameraMovement ?? ""}:${String(scene.visual ?? "")}`.toLowerCase()
+  ));
+  if (productShotPatterns.size < 4) failures.push("The product demonstration repeats the same shot instead of proving the product from multiple angles.");
   const narrationUrls = new Set(input.scenes.map((scene) => scene.voiceAudioUrl).filter(Boolean));
   if (narrationUrls.size !== 1) failures.push("The finished cut does not contain one continuous narration master.");
   if (!input.music?.url.includes("-kai-original.wav")) failures.push("The soundtrack was not created uniquely for this campaign.");
   const visualKeys = new Set(input.scenes.map((scene) =>
-    scene.videoUrl || scene.imageUrl || (scene.metadata?.motionGenerated === true ? `generated:${scene.id}` : "")
+    scene.videoUrl || (scene.imageUrl ? `${scene.imageUrl}:${scene.cameraShot}:${scene.cameraMovement}` : "") || (scene.metadata?.motionGenerated === true ? `generated:${scene.id}` : "")
   ).filter(Boolean));
   if (visualKeys.size < Math.min(4, input.scenes.length)) failures.push("The campaign does not contain enough visual variety.");
   if (input.narrationDurationSeconds) {

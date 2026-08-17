@@ -158,7 +158,9 @@ function repairDirection(
     // every scene into a text card and causes the final quality gate to reject
     // an otherwise usable spoken campaign.
     const purpose = PURPOSES[index];
-    const forceProductProof = index >= 3 && index <= 5;
+    // Reference-grade product ads keep the offer on camera through the body
+    // of the story. Only the opening hook and closing CTA may use context.
+    const forceProductProof = index >= 1 && index <= 6;
     const visualSource = forceProductProof || generated.visualSource === "product"
       ? "product"
       : "stock";
@@ -235,7 +237,9 @@ function validate(
     .map((scene) => clean(scene.narration))
     .join(" ");
 
-  if (words(narration).length < 55) {
+  const narrationWordCount = words(narration).length;
+
+  if (narrationWordCount < 65 || narrationWordCount > 95) {
     failures.push("The spoken story is too thin.");
   }
 
@@ -278,8 +282,18 @@ function validate(
     (scene) => scene.visualSource === "product",
   );
 
-  if (productScenes.length < 3) {
-    failures.push("KAI must direct at least three real product-proof scenes.");
+  if (productScenes.length < 5) {
+    failures.push("KAI must keep the real product on camera for most of the ad.");
+  }
+
+  const shotPatterns = new Set(
+    productScenes.map((scene) =>
+      `${clean(scene.cameraShot)}:${clean(scene.cameraMovement)}:${clean(scene.visual)}`.toLowerCase(),
+    ),
+  );
+
+  if (shotPatterns.size < 4) {
+    failures.push("The product demonstration needs at least four distinct shots or actions.");
   }
 
   for (const scene of productScenes) {
@@ -420,12 +434,14 @@ Hard rules:
 - This is a SPOKEN human story, not a slideshow and not a text presentation.
 - Open on a disruptive, specific, conversational line in under 2 seconds. No greeting.
 - Return exactly 8 scenes.
-- Write one continuous natural voiceover of 70-90 words across those 8 scenes.
+- Write one continuous natural voiceover of 65-95 words across those 8 scenes.
 - The spoken narration must clearly say the exact product name "${productNameForNarration}" at least once.
 - Do not include the creator username or seller attribution when speaking the product name.
 - Make the product mechanism tangible: show what is inside, how it is used, and the concrete before/after.
 - Use stock footage only for human context. Mark those scenes visualSource "stock" and give them a literal portrait-footage query.
-- Mark at least THREE reveal, walkthrough, or proof scenes visualSource "product". Those scenes will use real uploaded product screenshots or screen recordings. Narration must describe the exact feature the viewer should see.
+- Keep the product visible through the body of the ad: mark at least FIVE reveal, walkthrough, close-up, or proof scenes visualSource "product". Those scenes will use real uploaded product screenshots or screen recordings. Narration must describe the exact feature the viewer should see.
+- Direct those product moments as a demonstration sequence, not repeated pictures: overview, interaction, detail, proof, result. Vary cameraShot, cameraMovement, and the literal visual action.
+- Match proven TikTok pacing: a meaningful visual change every 2.5-4.5 seconds, hard cuts for energy, and no scene longer than 5 seconds.
 - For every product scene, set productAssetIndex to the uploaded file number that best supports that exact spoken line.
 - Use the assets in a logical demonstration order and do not repeatedly show one file when multiple files are available.
 - Never pretend stock footage is the product. Product scenes may use footageQuery "uploaded product asset".
