@@ -209,7 +209,7 @@ export async function generateMotionScenes(input: {
       continue;
     }
 
-    if (input.openArtAccessToken && openArtAttempts < 3) {
+    if (input.openArtAccessToken && openArtAttempts < 1) {
       openArtAttempts += 1;
       const openArtPrompt = [
         "Create one polished five-second vertical 9:16 commercial shot.",
