@@ -219,6 +219,16 @@ function repairDirection(
     repairedScenes[7].onScreenText = "Click the link to get it";
   }
 
+  // Normalize the live director's output before validation. Models can ignore
+  // a prompt-level word limit, so KAI enforces a deterministic per-scene cap.
+  // Seven story scenes at 11 words plus the fixed CTA stay comfortably below
+  // 95 words while keeping every scene meaningful and leaving room for repairs.
+  for (let index = 0; index < 7; index += 1) {
+    repairedScenes[index].narration = words(
+      clean(repairedScenes[index].narration),
+    ).slice(0, 11).join(" ");
+  }
+
   // The validator requires 65-95 spoken words. Repair to the same floor
   // while keeping headroom below the ceiling. This prevents a short-script
   // repair from turning into an overlong script on the same attempt.
