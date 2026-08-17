@@ -1,6 +1,6 @@
 import type { VideoAudioTrack, VideoScene } from "../../remotion/types";
 
-const INTERNAL_COPY = [/\bproduct\s*:/i, /\baudience\s*:/i, /\bcreative direction\s*:/i, /\bcreative approach\s*:/i, /show what the buyer receives/i, /make the product tangible/i, /avoid hype/i, /campaign approach/i];
+const INTERNAL_COPY = [/\bproduct\s*:/i, /\baudience\s*:/i, /\bcreative direction\s*:/i, /\bcreative approach\s*:/i, /show what the buyer receives/i, /make the product tangible/i, /avoid hype/i, /campaign approach/i, /before\/?after visualization/i, /content creator joyful/i];
 const REJECTED_TEMPLATE_COPY = [/stop juggling your content/i, /scattered ideas kill consistency/i, /content shouldn't feel this hard/i, /one planner.*every campaign/i, /organizes it all/i, /plan.*schedule.*publish/i, /create with clarity/i, /get the planner/i];
 const wordCount = (value?: string) => value?.trim().split(/\s+/).filter(Boolean).length ?? 0;
 
@@ -8,12 +8,23 @@ export function enforcePremiumVideoQuality(input: { scenes: VideoScene[]; music?
   const failures: string[] = [];
   if (input.scenes.length < 4) failures.push("The campaign needs at least four directed scenes.");
   const productProofScenes = input.scenes.filter((scene) => scene.metadata?.productProof === true);
-  if (productProofScenes.length < 5) failures.push("The campaign must keep the real product on camera for most of the ad.");
+  const uniqueProductAssets = new Set(
+    productProofScenes
+      .map((scene) => String(scene.metadata?.productAssetUrl ?? "").trim())
+      .filter(Boolean),
+  );
+  const requiredProductScenes = uniqueProductAssets.size <= 1
+    ? 2
+    : uniqueProductAssets.size <= 3
+      ? 3
+      : 5;
+  if (productProofScenes.length < requiredProductScenes) {
+    failures.push("The campaign does not contain enough truthful product proof for the available assets.");
+  }
   input.scenes.forEach((scene, index) => {
     const isProductProof = scene.metadata?.productProof === true;
-    const hasGeneratedMotion = scene.metadata?.motionGenerated === true;
     if (isProductProof && !scene.videoUrl && !scene.imageUrl) failures.push(`Scene ${index + 1} has no uploaded product proof.`);
-    if (!isProductProof && !scene.videoUrl && !hasGeneratedMotion) failures.push(`Scene ${index + 1} has no genuine motion footage.`);
+    if (!isProductProof && !scene.videoUrl) failures.push(`Scene ${index + 1} has no genuine human-context motion footage.`);
     if (!scene.voiceAudioUrl) failures.push(`Scene ${index + 1} has no Chatterbox narration.`);
     if (!isProductProof && scene.imageUrl) failures.push(`Scene ${index + 1} still contains a slideshow fallback.`);
     if (wordCount(scene.text) > 7) failures.push(`Scene ${index + 1} headline exceeds seven words.`);
@@ -33,7 +44,7 @@ export function enforcePremiumVideoQuality(input: { scenes: VideoScene[]; music?
   const productShotPatterns = new Set(productProofScenes.map((scene) =>
     `${scene.cameraShot ?? ""}:${scene.cameraMovement ?? ""}:${String(scene.visual ?? "")}`.toLowerCase()
   ));
-  if (productShotPatterns.size < 4) failures.push("The product demonstration repeats the same shot instead of proving the product from multiple angles.");
+  if (productShotPatterns.size < Math.min(requiredProductScenes, 4)) failures.push("The product demonstration repeats the same treatment instead of using the available product media intentionally.");
   const narrationUrls = new Set(input.scenes.map((scene) => scene.voiceAudioUrl).filter(Boolean));
   if (narrationUrls.size !== 1) failures.push("The finished cut does not contain one continuous narration master.");
   if (!input.music?.url.includes("-kai-original.wav")) failures.push("The soundtrack was not created uniquely for this campaign.");
@@ -41,6 +52,31 @@ export function enforcePremiumVideoQuality(input: { scenes: VideoScene[]; music?
     scene.videoUrl || (scene.imageUrl ? `${scene.imageUrl}:${scene.cameraShot}:${scene.cameraMovement}` : "") || (scene.metadata?.motionGenerated === true ? `generated:${scene.id}` : "")
   ).filter(Boolean));
   if (visualKeys.size < Math.min(4, input.scenes.length)) failures.push("The campaign does not contain enough visual variety.");
+  const rawMediaUsage = new Map<string, number>();
+  for (const scene of input.scenes) {
+    const mediaUrl = scene.videoUrl || scene.imageUrl;
+    if (!mediaUrl) continue;
+    rawMediaUsage.set(mediaUrl, (rawMediaUsage.get(mediaUrl) ?? 0) + 1);
+  }
+  if ([...rawMediaUsage.values()].some((count) => count > 2)) {
+    failures.push("One media asset is repeated through too much of the advertisement.");
+  }
+  const ctaScene = input.scenes.find(
+    (scene) => scene.metadata?.scenePurpose === "call-to-action",
+  );
+  if (!ctaScene) {
+    failures.push("The advertisement has no final call-to-action scene.");
+  } else {
+    if (!/\b(click|tap)\b.*\blink\b/i.test(`${ctaScene.text} ${ctaScene.narration}`)) {
+      failures.push("The final scene does not tell the viewer to click the link.");
+    }
+    if (!String(ctaScene.metadata?.destination ?? "").startsWith("http")) {
+      failures.push("The final scene does not contain the product destination.");
+    }
+    if ((ctaScene.hashtags ?? []).length < 3) {
+      failures.push("The final scene needs at least three campaign hashtags.");
+    }
+  }
   if (input.narrationDurationSeconds) {
     const videoDurationSeconds = input.scenes.reduce((total, scene) => total + scene.durationInFrames / 30, 0);
     if (videoDurationSeconds < input.narrationDurationSeconds + 0.75) failures.push("The video ends before the narration is complete.");

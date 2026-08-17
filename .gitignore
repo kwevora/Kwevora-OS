@@ -52,3 +52,11 @@ next-env.d.ts
 !.dev.vars.example
 
 !.env.example
+
+
+# KAI runtime render artifacts
+/data/render-jobs/*.json
+/public/generated-audio/
+/public/generated-videos/
+/public/generated-motion/
+/public/generated-music/
