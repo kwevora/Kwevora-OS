@@ -153,11 +153,11 @@ function repairDirection(
   for (let index = 0; index < targetSceneCount; index += 1) {
     const generated = generatedScenes[index % Math.max(1, generatedScenes.length)] ?? {};
     const fallback = fallbackScenes[index % fallbackScenes.length];
-    const purpose = PURPOSES.includes(
-      generated.purpose as KaiCreativeScene["purpose"],
-    )
-      ? generated.purpose
-      : PURPOSES[index];
+    // The repaired sequence owns the story structure. Reusing an otherwise
+    // valid generated purpose (especially "hook") across cloned scenes turns
+    // every scene into a text card and causes the final quality gate to reject
+    // an otherwise usable spoken campaign.
+    const purpose = PURPOSES[index];
     const forceProductProof = index >= 3 && index <= 5;
     const visualSource = forceProductProof || generated.visualSource === "product"
       ? "product"
