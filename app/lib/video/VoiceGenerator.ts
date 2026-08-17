@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { parseFile } from "music-metadata";
 
 export type VoiceGenerationRequest = {
   videoId: string;
@@ -12,6 +13,7 @@ export type VoiceGenerationResult = {
   success: boolean;
   audioUrl?: string;
   outputPath?: string;
+  durationSeconds?: number;
   message: string;
 };
 
@@ -23,7 +25,7 @@ function prepareScriptForSpeech(
   return script
     .replace(
       /\bKWEVORA\b/gi,
-      "Kweh-vor-uh",
+      "Kwehvoruh",
     )
     .replace(
       /\bKAI\b/g,
@@ -31,7 +33,7 @@ function prepareScriptForSpeech(
     )
     .replace(
   /\bKwevora OS\b/gi,
-  "Kweh-vor-uh",
+  "Kwehvoruh",
 )
     .replace(/\s+/g, " ")
     .trim();
@@ -117,11 +119,23 @@ export async function generateVoice(
 
     python.on(
       "close",
-      (code) => {
+      async (code) => {
         if (code === 0) {
+          const metadata = await parseFile(outputPath);
+          const durationSeconds = metadata.format.duration;
+
+          if (!durationSeconds || durationSeconds <= 0) {
+            resolve({
+              success: false,
+              message: "Chatterbox returned narration with no measurable duration.",
+            });
+            return;
+          }
+
           resolve({
             success: true,
             outputPath,
+            durationSeconds,
             audioUrl:
               `/generated-audio/${videoId}.wav`,
             message:
