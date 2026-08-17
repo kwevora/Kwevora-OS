@@ -3,8 +3,10 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 const OPENART_MCP_URL = "https://mcp.openart.ai/mcp";
-const RESOURCE_METADATA_URL =
-  "https://mcp.openart.ai/.well-known/oauth-protected-resource/mcp";
+const RESOURCE_METADATA_URLS = [
+  "https://mcp.openart.ai/.well-known/oauth-protected-resource/mcp",
+  "https://mcp.openart.ai/.well-known/oauth-protected-resource",
+];
 
 type ProtectedResourceMetadata = {
   authorization_servers?: string[];
@@ -61,13 +63,77 @@ async function loadJson<T>(url: string) {
   return (await response.json()) as T;
 }
 
+async function discoverResourceMetadata() {
+  for (const url of RESOURCE_METADATA_URLS) {
+    try {
+      return await loadJson<ProtectedResourceMetadata>(url);
+    } catch {
+      // OpenArt may advertise a path-specific or root metadata URL.
+    }
+  }
+
+  const probeResponse = await fetch(OPENART_MCP_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "kwevora-openart-discovery",
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: {
+          name: "KWEVORA OS",
+          version: "9.10.1",
+        },
+      },
+    }),
+    cache: "no-store",
+  });
+
+  const authenticateHeader =
+    probeResponse.headers.get("www-authenticate") ?? "";
+  const metadataMatch = authenticateHeader.match(
+    /resource_metadata="([^"]+)"/i,
+  );
+
+  if (!metadataMatch?.[1]) {
+    throw new Error("OpenArt authorization metadata could not be discovered.");
+  }
+
+  return loadJson<ProtectedResourceMetadata>(metadataMatch[1]);
+}
+
+async function discoverAuthorizationMetadata(issuerValue: string) {
+  const issuer = new URL(issuerValue);
+  const path = issuer.pathname === "/" ? "" : issuer.pathname.replace(/\/$/, "");
+  const candidates = [
+    `${issuer.origin}/.well-known/oauth-authorization-server${path}`,
+    `${issuer.origin}/.well-known/openid-configuration${path}`,
+    `${issuerValue.replace(/\/$/, "")}/.well-known/oauth-authorization-server`,
+  ];
+
+  for (const url of candidates) {
+    try {
+      return await loadJson<AuthorizationServerMetadata>(url);
+    } catch {
+      // Continue through the RFC-compatible discovery locations.
+    }
+  }
+
+  throw new Error("OpenArt authorization server metadata could not be loaded.");
+}
+
 export async function GET(request: Request) {
   try {
     const requestUrl = new URL(request.url);
     const redirectUri = `${requestUrl.origin}/api/openart/callback`;
 
     const resourceMetadata =
-      await loadJson<ProtectedResourceMetadata>(RESOURCE_METADATA_URL);
+      await discoverResourceMetadata();
 
     const authorizationServer =
       resourceMetadata.authorization_servers?.[0];
@@ -76,11 +142,8 @@ export async function GET(request: Request) {
       throw new Error("OpenArt did not provide an authorization server.");
     }
 
-    const issuer = authorizationServer.replace(/\/$/, "");
     const authorizationMetadata =
-      await loadJson<AuthorizationServerMetadata>(
-        `${issuer}/.well-known/oauth-authorization-server`,
-      );
+      await discoverAuthorizationMetadata(authorizationServer);
 
     const authorizationEndpoint =
       authorizationMetadata.authorization_endpoint;
