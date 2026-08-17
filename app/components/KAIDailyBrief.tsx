@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import KAIMorningLearningReport from "./KAIMorningLearningReport";
 
 type ExecutivePriority = {
   id: string;
@@ -238,6 +239,10 @@ export default function KAIDailyBrief() {
               detail={formatStatus(report.executionStatus)}
             />
           </div>
+        </div>
+
+        <div className="mt-6">
+          <KAIMorningLearningReport />
         </div>
 
         <div className="mt-8 grid gap-5 lg:grid-cols-3">

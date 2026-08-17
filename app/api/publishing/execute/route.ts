@@ -1,12 +1,12 @@
-import {
-  NextRequest,
-  NextResponse,
-} from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import {
   publishingExecutionEngine,
   type PublishingExecutionItem,
 } from "../../../lib/publishing/PublishingExecutionEngine";
+
+import { autonomousContentCycleEngine } from "../../../lib/AutonomousContentCycleEngine";
+import { growthPlanAuthorizationEngine } from "../../../lib/GrowthPlanAuthorizationEngine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,120 +47,77 @@ type PublishingUpdateResponse = {
   item?: unknown;
 };
 
-function cleanString(
-  value: unknown,
-): string {
-  return typeof value === "string"
-    ? value.trim()
-    : "";
+function cleanString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
-function getBaseUrl(
-  request: NextRequest,
-): string {
+function getBaseUrl(request: NextRequest): string {
   return request.nextUrl.origin;
 }
 
 async function loadPublishingQueue(
   request: NextRequest,
 ): Promise<PublishingExecutionItem[]> {
-  const response = await fetch(
-    `${getBaseUrl(request)}/api/publishing`,
-    {
-      method: "GET",
-      cache: "no-store",
-    },
-  );
+  const response = await fetch(`${getBaseUrl(request)}/api/publishing`, {
+    method: "GET",
+    cache: "no-store",
+  });
 
   if (!response.ok) {
-    throw new Error(
-      "Could not load the Publishing Queue.",
-    );
+    throw new Error("Could not load the Publishing Queue.");
   }
 
-  const data =
-    (await response.json()) as PublishingQueueResponse;
+  const data = (await response.json()) as PublishingQueueResponse;
 
-  return Array.isArray(data.items)
-    ? data.items
-    : [];
+  return Array.isArray(data.items) ? data.items : [];
 }
 
-function loadYouTubeConnection(
-  request: NextRequest,
-): YouTubeConnection {
-  const accessToken =
-    request.cookies.get(
-      "kwevora_youtube_access_token",
-    )?.value;
+function loadYouTubeConnection(request: NextRequest): YouTubeConnection {
+  const accessToken = request.cookies.get(
+    "kwevora_youtube_access_token",
+  )?.value;
 
-  const refreshToken =
-    request.cookies.get(
-      "kwevora_youtube_refresh_token",
-    )?.value;
+  const refreshToken = request.cookies.get(
+    "kwevora_youtube_refresh_token",
+  )?.value;
 
-  const channelId =
-    request.cookies.get(
-      "kwevora_youtube_channel_id",
-    )?.value;
+  const channelId = request.cookies.get("kwevora_youtube_channel_id")?.value;
 
-  const channelName =
-    request.cookies.get(
-      "kwevora_youtube_channel_name",
-    )?.value;
+  const channelName = request.cookies.get(
+    "kwevora_youtube_channel_name",
+  )?.value;
 
-  const hasAccessToken =
-    Boolean(accessToken);
+  const hasAccessToken = Boolean(accessToken);
 
-  const hasRefreshToken =
-    Boolean(refreshToken);
+  const hasRefreshToken = Boolean(refreshToken);
 
   const connected =
-    (hasAccessToken ||
-      hasRefreshToken) &&
+    (hasAccessToken || hasRefreshToken) &&
     Boolean(channelId) &&
     Boolean(channelName);
 
   return {
     connected,
 
-    authenticated:
-      hasAccessToken,
+    authenticated: hasAccessToken,
 
-    refreshAvailable:
-      hasRefreshToken,
+    refreshAvailable: hasRefreshToken,
 
-    channelId:
-      channelId ?? "",
+    channelId: channelId ?? "",
 
-    channelName:
-      channelName ?? "",
+    channelName: channelName ?? "",
   };
 }
 
-function buildYouTubeDescription(
-  item: PublishingExecutionItem,
-): string {
+function buildYouTubeDescription(item: PublishingExecutionItem): string {
   return [
-    cleanString(
-      item.caption,
-    ),
+    cleanString(item.caption),
 
-    cleanString(
-      item.callToAction,
-    ),
+    cleanString(item.callToAction),
 
-    cleanString(
-      item.destinationLink,
-    ),
+    cleanString(item.destinationLink),
 
-    Array.isArray(
-      item.hashtags,
-    )
-      ? item.hashtags
-          .filter(Boolean)
-          .join(" ")
-      : "",
+    Array.isArray(item.hashtags) ? item.hashtags.filter(Boolean).join(" ") : "",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -176,80 +133,44 @@ async function uploadToYouTube(
     );
   }
 
-  const response = await fetch(
-    `${getBaseUrl(request)}/api/youtube/upload`,
-    {
-      method: "POST",
+  const response = await fetch(`${getBaseUrl(request)}/api/youtube/upload`, {
+    method: "POST",
 
-      headers: {
-        "Content-Type":
-          "application/json",
+    headers: {
+      "Content-Type": "application/json",
 
-        cookie:
-          request.headers.get(
-            "cookie",
-          ) ?? "",
-      },
-
-      body:
-        JSON.stringify({
-          title:
-            item.title,
-
-          description:
-            buildYouTubeDescription(
-              item,
-            ),
-
-          tags:
-            Array.isArray(
-              item.hashtags,
-            )
-              ? item.hashtags
-              : [],
-
-          videoPath:
-            item.media.filePath,
-
-          storedFileName:
-            item.media.storedFileName,
-
-          mimeType:
-            item.media.mimeType,
-
-          /*
-           * KAI uploads privately first.
-           * This prevents automatic public publishing
-           * before the owner has reviewed the actual
-           * YouTube upload.
-           */
-          privacyStatus:
-            "private",
-        }),
-
-      cache:
-        "no-store",
+      cookie: request.headers.get("cookie") ?? "",
     },
-  );
 
-  const data =
-    (await response.json()) as YouTubeUploadResponse;
+    body: JSON.stringify({
+      title: item.title,
 
-  if (
-    !response.ok ||
-    !data.success
-  ) {
+      description: buildYouTubeDescription(item),
+
+      tags: Array.isArray(item.hashtags) ? item.hashtags : [],
+
+      videoPath: item.media.filePath,
+
+      storedFileName: item.media.storedFileName,
+
+      mimeType: item.media.mimeType,
+
+      /* Owner approval permits upload, but first delivery stays private. */
+      privacyStatus: "private",
+    }),
+
+    cache: "no-store",
+  });
+
+  const data = (await response.json()) as YouTubeUploadResponse;
+
+  if (!response.ok || !data.success) {
     throw new Error(
-      data.message ||
-        "KWEVORA could not upload the video to YouTube.",
+      data.message || "KWEVORA could not upload the video to YouTube.",
     );
   }
 
-  if (
-    !cleanString(
-      data.video?.id,
-    )
-  ) {
+  if (!cleanString(data.video?.id)) {
     throw new Error(
       "YouTube accepted the upload, but KWEVORA did not receive a video ID.",
     );
@@ -267,82 +188,47 @@ async function markPublishingItemPublished({
   item: PublishingExecutionItem;
   upload: YouTubeUploadResponse;
 }): Promise<PublishingUpdateResponse> {
-  const videoId =
-    cleanString(
-      upload.video?.id,
-    );
+  const videoId = cleanString(upload.video?.id);
 
   const videoUrl =
-    cleanString(
-      upload.video?.url,
-    ) ||
+    cleanString(upload.video?.url) ||
     `https://www.youtube.com/watch?v=${videoId}`;
 
-  const response = await fetch(
-    `${getBaseUrl(request)}/api/publishing`,
-    {
-      method: "POST",
+  const response = await fetch(`${getBaseUrl(request)}/api/publishing`, {
+    method: "POST",
 
-      headers: {
-        "Content-Type":
-          "application/json",
-      },
-
-      body:
-        JSON.stringify({
-          action:
-            "mark_published",
-
-          id:
-            item.id,
-
-          publication: {
-            platform:
-              "youtube",
-
-            externalId:
-              videoId,
-
-            url:
-              videoUrl,
-
-            publishedAt:
-              new Date()
-                .toISOString(),
-
-            channelId:
-              cleanString(
-                upload.video
-                  ?.channelId,
-              ),
-
-            channelName:
-              cleanString(
-                upload.video
-                  ?.channelTitle,
-              ),
-
-            privacyStatus:
-              cleanString(
-                upload.video
-                  ?.privacyStatus,
-              ) ||
-              "private",
-          },
-        }),
-
-      cache:
-        "no-store",
+    headers: {
+      "Content-Type": "application/json",
     },
-  );
 
-  const data =
-    (await response.json()) as PublishingUpdateResponse;
+    body: JSON.stringify({
+      action: "mark_published",
 
-  if (
-    !response.ok ||
-    !data.success
-  ) {
+      id: item.id,
+
+      publication: {
+        platform: "youtube",
+
+        externalId: videoId,
+
+        url: videoUrl,
+
+        publishedAt: new Date().toISOString(),
+
+        channelId: cleanString(upload.video?.channelId),
+
+        channelName: cleanString(upload.video?.channelTitle),
+
+        privacyStatus: cleanString(upload.video?.privacyStatus) || "private",
+      },
+    }),
+
+    cache: "no-store",
+  });
+
+  const data = (await response.json()) as PublishingUpdateResponse;
+
+  if (!response.ok || !data.success) {
     throw new Error(
       data.message ||
         "The video reached YouTube, but KWEVORA could not save the publishing result.",
@@ -352,322 +238,231 @@ async function markPublishingItemPublished({
   return data;
 }
 
-export async function GET(
-  request: NextRequest,
-) {
+export async function GET(request: NextRequest) {
   try {
-    const publishingQueue =
-      await loadPublishingQueue(
-        request,
-      );
+    const publishingQueue = await loadPublishingQueue(request);
 
-    const youtube =
-      loadYouTubeConnection(
-        request,
-      );
+    const youtube = loadYouTubeConnection(request);
 
-    const youtubeAuthorized =
-      youtube.authenticated ||
-      youtube.refreshAvailable;
+    const youtubeAuthorized = youtube.authenticated || youtube.refreshAvailable;
 
-    const assessments =
-      publishingQueue.map(
-        (item) =>
-          publishingExecutionEngine.assess({
-            platform:
-              "youtube",
+    const assessments = publishingQueue.map((item) =>
+      publishingExecutionEngine.assess({
+        platform: "youtube",
 
-            item,
+        item,
 
-            connection: {
-              platform:
-                "youtube",
+        connection: {
+          platform: "youtube",
 
-              connected:
-                youtube.connected,
+          connected: youtube.connected,
 
-              authenticated:
-                youtubeAuthorized,
+          authenticated: youtubeAuthorized,
 
-              accountId:
-                youtube.channelId,
+          accountId: youtube.channelId,
 
-              accountName:
-                youtube.channelName,
-            },
-          }),
-      );
+          accountName: youtube.channelName,
+        },
+      }),
+    );
 
     return NextResponse.json({
       success: true,
 
       youtube: {
-        connected:
-          youtube.connected,
+        connected: youtube.connected,
 
-        authenticated:
-          youtubeAuthorized,
+        authenticated: youtubeAuthorized,
 
-        accessTokenAvailable:
-          youtube.authenticated,
+        accessTokenAvailable: youtube.authenticated,
 
-        refreshAvailable:
-          youtube.refreshAvailable,
+        refreshAvailable: youtube.refreshAvailable,
 
-        channelId:
-          youtube.channelId,
+        channelId: youtube.channelId,
 
-        channelName:
-          youtube.channelName,
+        channelName: youtube.channelName,
       },
 
-      total:
-        assessments.length,
+      total: assessments.length,
 
-      ready:
-        assessments.filter(
-          (item) =>
-            item.canExecute,
-        ).length,
+      ready: assessments.filter((item) => item.canExecute).length,
 
-      waiting:
-        assessments.filter(
-          (item) =>
-            !item.canExecute,
-        ).length,
+      waiting: assessments.filter((item) => !item.canExecute).length,
 
       assessments,
     });
   } catch (error) {
-    console.error(
-      "Publishing execution assessment failed:",
-      error,
-    );
+    console.error("Publishing execution assessment failed:", error);
 
     return NextResponse.json(
       {
-        success:
-          false,
+        success: false,
 
-        message:
-          "KWEVORA could not evaluate the Publishing Queue.",
+        message: "KWEVORA could not evaluate the Publishing Queue.",
       },
       {
-        status:
-          500,
+        status: 500,
       },
     );
   }
 }
 
-export async function POST(
-  request: NextRequest,
-) {
+export async function POST(request: NextRequest) {
   try {
-    const body =
-      (await request.json().catch(
-        () => ({}),
-      )) as Record<
-        string,
-        unknown
-      >;
+    const body = (await request.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
 
-    const publishingItemId =
-      cleanString(
-        body.publishingItemId,
-      );
+    const publishingItemId = cleanString(body.publishingItemId);
 
-    const platform =
-      cleanString(
-        body.platform,
-      ) ||
-      "youtube";
+    const platform = cleanString(body.platform) || "youtube";
 
-    if (
-      !publishingItemId
-    ) {
+    if (!publishingItemId) {
       return NextResponse.json(
         {
-          success:
-            false,
+          success: false,
 
-          message:
-            "publishingItemId is required.",
+          message: "publishingItemId is required.",
         },
         {
-          status:
-            400,
+          status: 400,
         },
       );
     }
 
-    const publishingQueue =
-      await loadPublishingQueue(
-        request,
-      );
+    const publishingQueue = await loadPublishingQueue(request);
 
-    const item =
-      publishingQueue.find(
-        (entry) =>
-          entry.id ===
-          publishingItemId,
-      );
+    const item = publishingQueue.find((entry) => entry.id === publishingItemId);
 
-    if (
-      !item
-    ) {
+    if (!item) {
       return NextResponse.json(
         {
-          success:
-            false,
+          success: false,
 
-          message:
-            "Publishing item not found.",
+          message: "Publishing item not found.",
         },
         {
-          status:
-            404,
+          status: 404,
         },
       );
     }
 
-    const youtube =
-      loadYouTubeConnection(
-        request,
-      );
-
-    const normalizedPlatform =
-      platform.toLowerCase();
-
-    const isYouTube =
-      normalizedPlatform ===
-      "youtube";
-
-    const assessment =
-      publishingExecutionEngine.assess({
-        platform:
-          normalizedPlatform,
-
-        item,
-
-        connection: {
-          platform:
-            normalizedPlatform,
-
-          connected:
-            isYouTube
-              ? youtube.connected
-              : false,
-
-          authenticated:
-            isYouTube
-              ? youtube.authenticated ||
-                youtube.refreshAvailable
-              : false,
-
-          accountId:
-            isYouTube
-              ? youtube.channelId
-              : "",
-
-          accountName:
-            isYouTube
-              ? youtube.channelName
-              : "",
-        },
-      });
-
-    if (
-      !assessment.canExecute
-    ) {
+    const authorization = await growthPlanAuthorizationEngine.decision(
+      cleanString(item.executionPlanId),
+      "publish",
+    );
+    if (!authorization.allowed) {
       return NextResponse.json({
-        success:
-          true,
+        success: true,
+        executed: false,
+        authorization,
+        message: authorization.reason,
+      });
+    }
 
-        executed:
-          false,
+    const youtube = loadYouTubeConnection(request);
+
+    const normalizedPlatform = platform.toLowerCase();
+
+    const isYouTube = normalizedPlatform === "youtube";
+
+    const assessment = publishingExecutionEngine.assess({
+      platform: normalizedPlatform,
+
+      item,
+
+      connection: {
+        platform: normalizedPlatform,
+
+        connected: isYouTube ? youtube.connected : false,
+
+        authenticated: isYouTube
+          ? youtube.authenticated || youtube.refreshAvailable
+          : false,
+
+        accountId: isYouTube ? youtube.channelId : "",
+
+        accountName: isYouTube ? youtube.channelName : "",
+      },
+    });
+
+    if (!assessment.canExecute) {
+      if (assessment.executionPlanId) {
+        await autonomousContentCycleEngine.blocked(
+          assessment.executionPlanId,
+          assessment.reason,
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+
+        executed: false,
 
         assessment,
 
-        message:
-          assessment.nextAction,
+        message: assessment.nextAction,
       });
     }
 
-    if (
-      !isYouTube
-    ) {
+    if (!isYouTube) {
       return NextResponse.json({
-        success:
-          true,
+        success: true,
 
-        executed:
-          false,
+        executed: false,
 
         assessment,
 
-        message:
-          `KAI does not yet have a real ${platform} uploader.`,
+        message: `KAI does not yet have a real ${platform} uploader.`,
       });
     }
 
-    const upload =
-      await uploadToYouTube(
-        request,
-        item,
-      );
+    const upload = await uploadToYouTube(request, item);
 
-    const publishingUpdate =
-      await markPublishingItemPublished({
-        request,
+    const publishingUpdate = await markPublishingItemPublished({
+      request,
 
-        item,
+      item,
 
-        upload,
-      });
+      upload,
+    });
+
+    await autonomousContentCycleEngine.published(assessment.executionPlanId, {
+      platform: "youtube",
+      externalId: cleanString(upload.video?.id),
+      url: cleanString(upload.video?.url),
+      publishedAt: new Date().toISOString(),
+    });
 
     return NextResponse.json({
-      success:
-        true,
+      success: true,
 
-      executed:
-        true,
+      executed: true,
 
       assessment,
 
-      executionPlanId:
-        assessment.executionPlanId,
+      executionPlanId: assessment.executionPlanId,
 
-      publishingItemId:
-        item.id,
+      publishingItemId: item.id,
 
-      platform:
-        "youtube",
+      platform: "youtube",
 
-      video:
-        upload.video,
+      video: upload.video,
 
-      publishingItem:
-        publishingUpdate.item,
+      publishingItem: publishingUpdate.item,
 
       message:
-        "KAI uploaded the approved video to YouTube privately and saved the real YouTube publication record.",
+        "KAI published the approved video to YouTube and saved the real publication record.",
     });
-  } catch (
-    error
-  ) {
-    console.error(
-      "Publishing execution request failed:",
-      error,
-    );
+  } catch (error) {
+    console.error("Publishing execution request failed:", error);
 
     return NextResponse.json(
       {
-        success:
-          false,
+        success: false,
 
-        executed:
-          false,
+        executed: false,
 
         message:
           error instanceof Error
@@ -675,8 +470,7 @@ export async function POST(
             : "KWEVORA could not execute the publishing request.",
       },
       {
-        status:
-          500,
+        status: 500,
       },
     );
   }

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useKAIRuntime } from "../hooks/useKAIRuntime";
+import KAIMorningLearningReport from "./KAIMorningLearningReport";
 
 type ServerOvernightReport = {
   summary: string;
@@ -153,6 +154,10 @@ export default function WhileYouSleptFlow() {
             </div>
           </div>
 
+          <div className="mt-6">
+            <KAIMorningLearningReport />
+          </div>
+
           <div className="mt-8 rounded-3xl border border-cyan-500/25 bg-cyan-500/10 p-6">
             <p className="text-sm font-bold tracking-[0.25em] text-cyan-300">
               TODAY’S BEST MOVE
@@ -274,6 +279,10 @@ export default function WhileYouSleptFlow() {
             ? clientReport.summary
             : loadMessage}
       </p>
+
+      <div className="mt-6">
+        <KAIMorningLearningReport />
+      </div>
 
       {mounted && clientReport ? (
         <div className="mt-8 grid gap-4 md:grid-cols-2">

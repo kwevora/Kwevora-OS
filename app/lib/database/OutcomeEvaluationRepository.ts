@@ -1,14 +1,8 @@
-import { randomUUID } from "crypto";
+import { randomUUID } from "node:crypto";
+import { getDatabase } from "./database";
+import type { OutcomeEvaluation } from "../OutcomeEngine";
 
-import {
-  db,
-} from "./database";
-
-import type {
-  OutcomeEvaluation,
-} from "../OutcomeEngine";
-
-type OutcomeEvaluationRow = {
+type Row = {
   id: string;
   executionPlanId: string;
   evaluation: string;
@@ -16,195 +10,82 @@ type OutcomeEvaluationRow = {
   score: number;
   createdAt: string;
 };
-
 export type StoredOutcomeEvaluation = {
   id: string;
-
   executionPlanId: string;
-
   evaluation: OutcomeEvaluation;
-
   outcome: string;
-
   score: number;
-
   createdAt: string;
 };
-
-function rowToStoredEvaluation(
-  row: OutcomeEvaluationRow,
-): StoredOutcomeEvaluation | null {
+const parse = (row: Row | null): StoredOutcomeEvaluation | null => {
+  if (!row) return null;
   try {
-    const evaluation =
-      JSON.parse(
-        row.evaluation,
-      ) as OutcomeEvaluation;
-
     return {
-      id:
-        row.id,
-
-      executionPlanId:
-        row.executionPlanId,
-
-      evaluation,
-
-      outcome:
-        row.outcome,
-
-      score:
-        row.score,
-
-      createdAt:
-        row.createdAt,
+      ...row,
+      evaluation: JSON.parse(row.evaluation) as OutcomeEvaluation,
     };
   } catch {
     return null;
   }
-}
-
+};
 export class OutcomeEvaluationRepository {
-  save(
-    evaluation: OutcomeEvaluation,
-  ): StoredOutcomeEvaluation {
-    const id =
-      randomUUID();
-
-    const createdAt =
-      new Date().toISOString();
-
-    const executionPlanId =
-      evaluation.learningResult
-        .plan.id;
-
-    db.prepare(
-      `
-        INSERT INTO outcome_evaluations
-        (
-          id,
-          executionPlanId,
-          evaluation,
-          outcome,
-          score,
-          createdAt
-        )
-        VALUES (?, ?, ?, ?, ?, ?)
-      `,
-    ).run(
-      id,
-      executionPlanId,
-      JSON.stringify(
-        evaluation,
-      ),
-      evaluation.outcome,
-      evaluation.score,
-      createdAt,
-    );
-
+  async save(evaluation: OutcomeEvaluation): Promise<StoredOutcomeEvaluation> {
+    const id = randomUUID(),
+      createdAt = new Date().toISOString(),
+      executionPlanId = evaluation.learningResult.plan.id;
+    await getDatabase()
+      .prepare(
+        "INSERT INTO outcome_evaluations (id,executionPlanId,evaluation,outcome,score,createdAt) VALUES (?,?,?,?,?,?)",
+      )
+      .bind(
+        id,
+        executionPlanId,
+        JSON.stringify(evaluation),
+        evaluation.outcome,
+        evaluation.score,
+        createdAt,
+      )
+      .run();
     return {
       id,
-
       executionPlanId,
-
       evaluation,
-
-      outcome:
-        evaluation.outcome,
-
-      score:
-        evaluation.score,
-
+      outcome: evaluation.outcome,
+      score: evaluation.score,
       createdAt,
     };
   }
-
-  latest():
-    | StoredOutcomeEvaluation
-    | null {
-    const row =
-      db.prepare(
-        `
-          SELECT *
-          FROM outcome_evaluations
-          ORDER BY createdAt DESC
-          LIMIT 1
-        `,
-      ).get() as
-        | OutcomeEvaluationRow
-        | undefined;
-
-    return row
-      ? rowToStoredEvaluation(
-          row,
+  async latest() {
+    return parse(
+      await getDatabase()
+        .prepare(
+          "SELECT * FROM outcome_evaluations ORDER BY createdAt DESC LIMIT 1",
         )
-      : null;
+        .first<Row>(),
+    );
   }
-
-  forExecutionPlan(
-    executionPlanId: string,
-  ): StoredOutcomeEvaluation[] {
-    const rows =
-      db.prepare(
-        `
-          SELECT *
-          FROM outcome_evaluations
-          WHERE executionPlanId = ?
-          ORDER BY createdAt DESC
-        `,
-      ).all(
-        executionPlanId,
-      ) as OutcomeEvaluationRow[];
-
-    return rows
-      .map(
-        rowToStoredEvaluation,
+  async forExecutionPlan(id: string) {
+    const { results = [] } = await getDatabase()
+      .prepare(
+        "SELECT * FROM outcome_evaluations WHERE executionPlanId=? ORDER BY createdAt DESC",
       )
-      .filter(
-        (
-          value,
-        ): value is StoredOutcomeEvaluation =>
-          value !== null,
-      );
+      .bind(id)
+      .all<Row>();
+    return results
+      .map(parse)
+      .filter((x): x is StoredOutcomeEvaluation => x !== null);
   }
-
-  history(
-    limit = 50,
-  ): StoredOutcomeEvaluation[] {
-    const safeLimit =
-      Math.max(
-        1,
-        Math.min(
-          500,
-          Math.floor(
-            limit,
-          ),
-        ),
-      );
-
-    const rows =
-      db.prepare(
-        `
-          SELECT *
-          FROM outcome_evaluations
-          ORDER BY createdAt DESC
-          LIMIT ?
-        `,
-      ).all(
-        safeLimit,
-      ) as OutcomeEvaluationRow[];
-
-    return rows
-      .map(
-        rowToStoredEvaluation,
+  async history(limit = 50) {
+    const { results = [] } = await getDatabase()
+      .prepare(
+        "SELECT * FROM outcome_evaluations ORDER BY createdAt DESC LIMIT ?",
       )
-      .filter(
-        (
-          value,
-        ): value is StoredOutcomeEvaluation =>
-          value !== null,
-      );
+      .bind(Math.max(1, Math.min(500, Math.floor(limit))))
+      .all<Row>();
+    return results
+      .map(parse)
+      .filter((x): x is StoredOutcomeEvaluation => x !== null);
   }
 }
-
-export const outcomeEvaluationRepository =
-  new OutcomeEvaluationRepository();
+export const outcomeEvaluationRepository = new OutcomeEvaluationRepository();

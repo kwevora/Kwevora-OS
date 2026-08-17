@@ -2,6 +2,13 @@ import { promises as fs } from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 
+import { autonomousContentCycleEngine } from "../../lib/AutonomousContentCycleEngine";
+import { growthPlanExecutionEngine } from "../../lib/GrowthPlanExecutionEngine";
+import type { ContentPackage } from "../../lib/ContentIntelligenceEngine";
+import { growthPlanAuthorizationEngine } from "../../lib/GrowthPlanAuthorizationEngine";
+import { autonomousPublishingHandoffEngine } from "../../lib/AutonomousPublishingHandoffEngine";
+import { DurableQueueRepository } from "../../lib/database/DurableQueueRepository";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -13,22 +20,18 @@ type VideoPlan = {
 };
 
 type MediaFile = {
-  source: "recording" | "upload";
+  source: "recording" | "upload" | "generated";
   fileName: string;
   storedFileName: string;
   mimeType: string;
   size: number;
   filePath: string;
+  videoUrl?: string;
 };
 
-type ReviewStatus =
-  | "needs_review"
-  | "approved";
+type ReviewStatus = "needs_review" | "approved";
 
-type ReviewFormat =
-  | "faceless_video"
-  | "record_yourself"
-  | "upload_video";
+type ReviewFormat = "faceless_video" | "record_yourself" | "upload_video";
 
 export type ReviewItem = {
   id: string;
@@ -59,6 +62,42 @@ export type ReviewItem = {
   pinnedComment: string;
 
   media?: MediaFile;
+  growthPlan?: ContentPackage["growthPlan"];
+  adaptiveCreation?: ContentPackage["adaptiveCreation"];
+  videoProduction?: {
+    videoId: string;
+    status: "ready_for_review";
+    videoUrl: string;
+    direction?: import("../../remotion/types").AdaptiveVideoDirection;
+    whyKaiDirectedItThisWay?: string;
+    reviewRequired: true;
+    currentVersion?: number;
+    approvedVersion?: number;
+    productionPackage?: import("../../remotion/types").VideoProductionPackage;
+    versions?: Array<{
+      version: number;
+      videoId: string;
+      videoUrl: string;
+      outputLocation: string;
+      createdAt: string;
+      changeType: string;
+      request: string;
+      changes: string[];
+      platform: string;
+    }>;
+  };
+  videoDirectionFeedback?: string;
+  platformApprovals?: Record<
+    string,
+    {
+      platform: string;
+      version: number;
+      videoId: string;
+      videoUrl: string;
+      outputLocation: string;
+      approvedAt: string;
+    }
+  >;
 };
 
 type PublishingItem = {
@@ -67,11 +106,7 @@ type PublishingItem = {
   approvedAt: string;
   updatedAt: string;
 
-  status:
-    | "approved"
-    | "ready_to_publish"
-    | "scheduled"
-    | "published";
+  status: "approved" | "ready_to_publish" | "scheduled" | "published";
 
   executionPlanId: string;
 
@@ -103,153 +138,104 @@ type PublishingItem = {
   publishedAt: string;
 
   media?: MediaFile;
+  growthPlan?: ContentPackage["growthPlan"];
+  videoVersionLock?: {
+    version: number;
+    videoId: string;
+    videoUrl: string;
+    lockedAt: string;
+  };
+  platformApprovals?: ReviewItem["platformApprovals"];
 };
 
-const dataFolder =
-  path.join(
-    process.cwd(),
-    "data",
-  );
+const dataFolder = path.join(process.cwd(), "data");
 
-const reviewFile =
-  path.join(
-    dataFolder,
-    "review-queue.json",
-  );
+const reviewFile = path.join(dataFolder, "review-queue.json");
 
-const publishingFile =
-  path.join(
-    dataFolder,
-    "publishing-queue.json",
-  );
+const publishingFile = path.join(dataFolder, "publishing-queue.json");
 
-async function ensureDataFile(
-  file: string,
-) {
-  await fs.mkdir(
-    dataFolder,
-    {
-      recursive: true,
-    },
-  );
+const reviewQueueRepository = new DurableQueueRepository<ReviewItem>(
+  "review_queue",
+  "review-queue.json",
+);
+
+const publishingQueueRepository = new DurableQueueRepository<PublishingItem>(
+  "publishing_queue",
+  "publishing-queue.json",
+);
+
+async function ensureDataFile(file: string) {
+  await fs.mkdir(dataFolder, {
+    recursive: true,
+  });
 
   try {
-    await fs.access(
-      file,
-    );
+    await fs.access(file);
   } catch {
-    await fs.writeFile(
-      file,
-      "[]",
-      "utf8",
-    );
+    await fs.writeFile(file, "[]", "utf8");
   }
 }
 
-async function readJson<T>(
-  file: string,
-): Promise<T[]> {
-  await ensureDataFile(
-    file,
-  );
+async function readJson<T>(file: string): Promise<T[]> {
+  if (file === reviewFile) {
+    return (await reviewQueueRepository.read()) as T[];
+  }
+
+  if (file === publishingFile) {
+    return (await publishingQueueRepository.read()) as T[];
+  }
+
+  await ensureDataFile(file);
 
   try {
-    const text =
-      await fs.readFile(
-        file,
-        "utf8",
-      );
+    const text = await fs.readFile(file, "utf8");
 
-    const parsed: unknown =
-      JSON.parse(
-        text,
-      );
+    const parsed: unknown = JSON.parse(text);
 
-    return Array.isArray(
-      parsed,
-    )
-      ? (
-          parsed as T[]
-        )
-      : [];
-  } catch (
-    error
-  ) {
-    console.error(
-      `Could not read ${file}:`,
-      error,
-    );
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch (error) {
+    console.error(`Could not read ${file}:`, error);
 
     return [];
   }
 }
 
-async function writeJson(
-  file: string,
-  data: unknown,
-) {
-  await ensureDataFile(
-    file,
-  );
+async function writeJson(file: string, data: unknown) {
+  if (file === reviewFile && Array.isArray(data)) {
+    await reviewQueueRepository.write(data as ReviewItem[]);
+    return;
+  }
 
-  await fs.writeFile(
-    file,
-    JSON.stringify(
-      data,
-      null,
-      2,
-    ),
-    "utf8",
-  );
+  if (file === publishingFile && Array.isArray(data)) {
+    await publishingQueueRepository.write(data as PublishingItem[]);
+    return;
+  }
+
+  await ensureDataFile(file);
+
+  await fs.writeFile(file, JSON.stringify(data, null, 2), "utf8");
 }
 
-function cleanString(
-  value: unknown,
-): string {
-  return typeof value ===
-    "string"
-    ? value.trim()
-    : "";
+function cleanString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
-function cleanStringArray(
-  value: unknown,
-): string[] {
-  if (
-    !Array.isArray(
-      value,
-    )
-  ) {
+function cleanStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
     return [];
   }
 
   return value
-    .filter(
-      (
-        item,
-      ): item is string =>
-        typeof item ===
-        "string",
-    )
-    .map(
-      (item) =>
-        item.trim(),
-    )
-    .filter(
-      Boolean,
-    );
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
-function cleanFormat(
-  value: unknown,
-): ReviewFormat {
+function cleanFormat(value: unknown): ReviewFormat {
   if (
-    value ===
-      "record_yourself" ||
-    value ===
-      "upload_video" ||
-    value ===
-      "faceless_video"
+    value === "record_yourself" ||
+    value === "upload_video" ||
+    value === "faceless_video"
   ) {
     return value;
   }
@@ -257,14 +243,8 @@ function cleanFormat(
   return "faceless_video";
 }
 
-function cleanVideoPlan(
-  value: unknown,
-): VideoPlan {
-  if (
-    !value ||
-    typeof value !==
-      "object"
-  ) {
+function cleanVideoPlan(value: unknown): VideoPlan {
+  if (!value || typeof value !== "object") {
     return {
       openingText: "",
       scenes: [],
@@ -273,103 +253,53 @@ function cleanVideoPlan(
     };
   }
 
-  const plan =
-    value as Record<
-      string,
-      unknown
-    >;
+  const plan = value as Record<string, unknown>;
 
   return {
-    openingText:
-      cleanString(
-        plan.openingText,
-      ),
+    openingText: cleanString(plan.openingText),
 
-    scenes:
-      cleanStringArray(
-        plan.scenes,
-      ),
+    scenes: cleanStringArray(plan.scenes),
 
-    endingText:
-      cleanString(
-        plan.endingText,
-      ),
+    endingText: cleanString(plan.endingText),
 
     estimatedLengthSeconds:
-      typeof plan.estimatedLengthSeconds ===
-        "number" &&
-      Number.isFinite(
-        plan.estimatedLengthSeconds,
-      )
+      typeof plan.estimatedLengthSeconds === "number" &&
+      Number.isFinite(plan.estimatedLengthSeconds)
         ? plan.estimatedLengthSeconds
         : 30,
   };
 }
 
-function cleanMedia(
-  value: unknown,
-):
-  | MediaFile
-  | undefined {
-  if (
-    !value ||
-    typeof value !==
-      "object"
-  ) {
+function cleanMedia(value: unknown): MediaFile | undefined {
+  if (!value || typeof value !== "object") {
     return undefined;
   }
 
-  const media =
-    value as Record<
-      string,
-      unknown
-    >;
+  const media = value as Record<string, unknown>;
 
   const source =
-    media.source ===
-    "upload"
+    media.source === "upload"
       ? "upload"
-      : media.source ===
-          "recording"
-        ? "recording"
-        : null;
+      : media.source === "generated"
+        ? "generated"
+        : media.source === "recording"
+          ? "recording"
+          : null;
 
-  const fileName =
-    cleanString(
-      media.fileName,
-    );
+  const fileName = cleanString(media.fileName);
 
-  const storedFileName =
-    cleanString(
-      media.storedFileName,
-    );
+  const storedFileName = cleanString(media.storedFileName);
 
-  const mimeType =
-    cleanString(
-      media.mimeType,
-    );
+  const mimeType = cleanString(media.mimeType);
 
-  const filePath =
-    cleanString(
-      media.filePath,
-    );
+  const filePath = cleanString(media.filePath);
 
   const size =
-    typeof media.size ===
-      "number" &&
-    Number.isFinite(
-      media.size,
-    )
+    typeof media.size === "number" && Number.isFinite(media.size)
       ? media.size
       : 0;
 
-  if (
-    !source ||
-    !fileName ||
-    !storedFileName ||
-    !mimeType ||
-    !filePath
-  ) {
+  if (!source || !fileName || !storedFileName || !mimeType || !filePath) {
     return undefined;
   }
 
@@ -383,133 +313,107 @@ function cleanMedia(
   };
 }
 
-function createPublishingItem(
-  item: ReviewItem,
-): PublishingItem {
-  const now =
-    new Date()
-      .toISOString();
+async function createPublishingItem(item: ReviewItem): Promise<PublishingItem> {
+  const now = new Date().toISOString();
+  const schedulingPermission = await growthPlanAuthorizationEngine.decision(
+    item.executionPlanId,
+    "schedule",
+  );
 
   return {
-    id:
-      item.id,
+    id: item.id,
 
-    createdAt:
-      item.createdAt,
+    createdAt: item.createdAt,
 
-    approvedAt:
-      now,
+    approvedAt: now,
 
-    updatedAt:
-      now,
+    updatedAt: now,
 
     status:
-      "ready_to_publish",
+      item.growthPlan?.scheduledFor && schedulingPermission.allowed
+        ? "scheduled"
+        : "ready_to_publish",
 
-    executionPlanId:
-      item.executionPlanId,
+    executionPlanId: item.executionPlanId,
 
-    idea:
-      item.idea,
+    idea: item.idea,
 
-    reason:
-      item.reason,
+    reason: item.reason,
 
-    hook:
-      item.hook,
+    hook: item.hook,
 
-    title:
-      item.title,
+    title: item.title,
 
-    script:
-      item.script,
+    script: item.script,
 
-    caption:
-      item.caption,
+    caption: item.caption,
 
-    hashtags:
-      item.hashtags,
+    hashtags: item.hashtags,
 
-    thumbnailIdea:
-      item.thumbnailIdea,
+    thumbnailIdea: item.thumbnailIdea,
 
-    callToAction:
-      item.callToAction,
+    callToAction: item.callToAction,
 
-    audience:
-      item.audience,
+    audience: item.audience,
 
-    recommendedPlatforms:
-      item.recommendedPlatforms,
+    recommendedPlatforms: item.recommendedPlatforms,
 
     videoPlan: {
-      openingText:
-        item.videoPlan
-          ?.openingText ??
-        "",
+      openingText: item.videoPlan?.openingText ?? "",
 
-      scenes:
-        Array.isArray(
-          item.videoPlan
-            ?.scenes,
-        )
-          ? item.videoPlan
-              .scenes
-          : [],
+      scenes: Array.isArray(item.videoPlan?.scenes)
+        ? item.videoPlan.scenes
+        : [],
 
-      endingText:
-        item.videoPlan
-          ?.endingText ??
-        "",
+      endingText: item.videoPlan?.endingText ?? "",
     },
 
-    format:
-      item.format,
+    format: item.format,
 
-    destinationLink:
-      item.destinationLink,
+    destinationLink: item.destinationLink,
 
-    pinnedComment:
-      item.pinnedComment,
+    pinnedComment: item.pinnedComment,
 
-    scheduledFor:
-      "",
+    scheduledFor: schedulingPermission.allowed
+      ? (item.growthPlan?.scheduledFor ?? "")
+      : "",
 
-    publishedAt:
-      "",
+    publishedAt: "",
 
-    media:
-      item.media,
+    media: item.media,
+
+    growthPlan: item.growthPlan,
+
+    videoVersionLock:
+      item.videoProduction && item.media
+        ? {
+            version: item.videoProduction.currentVersion ?? 1,
+            videoId: item.videoProduction.videoId,
+            videoUrl: item.media.videoUrl ?? item.videoProduction.videoUrl,
+            lockedAt: now,
+          }
+        : undefined,
+
+    platformApprovals: item.platformApprovals,
   };
 }
 
 export async function GET() {
   try {
-    const queue =
-      await readJson<
-        ReviewItem
-      >(
-        reviewFile,
-      );
+    const queue = await readJson<ReviewItem>(reviewFile);
 
     return NextResponse.json({
       success: true,
       items: queue,
     });
-  } catch (
-    error
-  ) {
-    console.error(
-      "Review Queue load failed:",
-      error,
-    );
+  } catch (error) {
+    console.error("Review Queue load failed:", error);
 
     return NextResponse.json(
       {
         success: false,
 
-        message:
-          "KWEVORA could not load the Review Queue.",
+        message: "KWEVORA could not load the Review Queue.",
       },
       {
         status: 500,
@@ -518,62 +422,123 @@ export async function GET() {
   }
 }
 
-export async function POST(
-  request: Request,
-) {
+export async function POST(request: Request) {
   try {
-    const body =
-      (
-        await request.json()
-      ) as Record<
-        string,
-        unknown
-      >;
+    const body = (await request.json()) as Record<string, unknown>;
 
-    const action =
-      cleanString(
-        body.action,
+    const action = cleanString(body.action);
+
+    if (action === "reject") {
+      const reviewQueue = await readJson<ReviewItem>(reviewFile);
+      const id = cleanString(body.id);
+      const item = reviewQueue.find((entry) => entry.id === id);
+      if (!item) {
+        return NextResponse.json(
+          { success: false, message: "Review item not found." },
+          { status: 404 },
+        );
+      }
+      const reason =
+        cleanString(body.reason) ||
+        "The owner rejected this content direction during review.";
+      await writeJson(
+        reviewFile,
+        reviewQueue.filter((entry) => entry.id !== id),
       );
+      await autonomousContentCycleEngine.stop(item.executionPlanId, reason);
+      return NextResponse.json({
+        success: true,
+        message:
+          "Rejected. KAI stopped this cycle and recorded the direction to avoid repeating it unchanged.",
+      });
+    }
 
-    if (
-      action ===
-      "approve"
-    ) {
-      const reviewQueue =
-        await readJson<
-          ReviewItem
-        >(
-          reviewFile,
+    if (action === "edit") {
+      const reviewQueue = await readJson<ReviewItem>(reviewFile);
+      const id = cleanString(body.id);
+      const index = reviewQueue.findIndex((entry) => entry.id === id);
+      if (index === -1) {
+        return NextResponse.json(
+          { success: false, message: "Review item not found." },
+          { status: 404 },
         );
+      }
+      const current = reviewQueue[index];
+      const updated: ReviewItem = {
+        ...current,
+        title: cleanString(body.title) || current.title,
+        hook: cleanString(body.hook) || current.hook,
+        caption: cleanString(body.caption) || current.caption,
+        callToAction: cleanString(body.callToAction) || current.callToAction,
+        videoDirectionFeedback:
+          cleanString(body.videoDirectionFeedback) ||
+          current.videoDirectionFeedback,
+      };
+      reviewQueue[index] = updated;
+      await writeJson(reviewFile, reviewQueue);
+      return NextResponse.json({
+        success: true,
+        item: updated,
+        message:
+          "Edits saved. KAI will learn them when you approve this package.",
+      });
+    }
 
-      const publishingQueue =
-        await readJson<
-          PublishingItem
-        >(
-          publishingFile,
+    if (action === "approve_platform") {
+      const reviewQueue = await readJson<ReviewItem>(reviewFile);
+      const id = cleanString(body.id);
+      const platform = cleanString(body.platform).toLowerCase();
+      const versionNumber =
+        typeof body.version === "number" ? Math.floor(body.version) : 0;
+      const index = reviewQueue.findIndex((entry) => entry.id === id);
+      const item = index >= 0 ? reviewQueue[index] : undefined;
+      const version = item?.videoProduction?.versions?.find(
+        (entry) => entry.version === versionNumber,
+      );
+      if (!item || !version || !platform)
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "That video version could not be approved for the selected platform.",
+          },
+          { status: 404 },
         );
+      item.platformApprovals = {
+        ...(item.platformApprovals ?? {}),
+        [platform]: {
+          platform,
+          version: version.version,
+          videoId: version.videoId,
+          videoUrl: version.videoUrl,
+          outputLocation: version.outputLocation,
+          approvedAt: new Date().toISOString(),
+        },
+      };
+      reviewQueue[index] = item;
+      await writeJson(reviewFile, reviewQueue);
+      return NextResponse.json({
+        success: true,
+        item,
+        message: `Version ${version.version} locked for ${platform}. Other platform versions can still be revised.`,
+      });
+    }
 
-      const id =
-        cleanString(
-          body.id,
-        );
+    if (action === "approve") {
+      const reviewQueue = await readJson<ReviewItem>(reviewFile);
 
-      const index =
-        reviewQueue.findIndex(
-          (item) =>
-            item.id ===
-            id,
-        );
+      const publishingQueue = await readJson<PublishingItem>(publishingFile);
 
-      if (
-        index === -1
-      ) {
+      const id = cleanString(body.id);
+
+      const index = reviewQueue.findIndex((item) => item.id === id);
+
+      if (index === -1) {
         return NextResponse.json(
           {
             success: false,
 
-            message:
-              "Review item not found.",
+            message: "Review item not found.",
           },
           {
             status: 404,
@@ -581,210 +546,154 @@ export async function POST(
         );
       }
 
-      const reviewItem =
-        reviewQueue[
-          index
-        ];
+      const reviewItem = reviewQueue[index];
 
-      const publishingItem =
-        createPublishingItem(
-          reviewItem,
-        );
+      const publishingItem = await createPublishingItem(reviewItem);
 
-      const existingPublishingIndex =
-        publishingQueue.findIndex(
-          (item) =>
-            item.id ===
-            publishingItem.id,
-        );
+      const existingPublishingIndex = publishingQueue.findIndex(
+        (item) => item.id === publishingItem.id,
+      );
 
-      if (
-        existingPublishingIndex >=
-        0
-      ) {
-        publishingQueue[
-          existingPublishingIndex
-        ] =
-          publishingItem;
+      if (existingPublishingIndex >= 0) {
+        publishingQueue[existingPublishingIndex] = publishingItem;
       } else {
-        publishingQueue.unshift(
-          publishingItem,
-        );
+        publishingQueue.unshift(publishingItem);
       }
 
-      reviewQueue.splice(
-        index,
-        1,
+      reviewQueue.splice(index, 1);
+
+      await writeJson(reviewFile, reviewQueue);
+
+      await writeJson(publishingFile, publishingQueue);
+
+      const publishingHandoffs = autonomousPublishingHandoffEngine.enqueue({
+        publishingItemId: publishingItem.id,
+        executionPlanId: publishingItem.executionPlanId,
+        recommendedPlatforms: publishingItem.recommendedPlatforms,
+        scheduledFor: publishingItem.scheduledFor,
+        title: publishingItem.title,
+        caption: publishingItem.caption,
+        hashtags: publishingItem.hashtags,
+        callToAction: publishingItem.callToAction,
+        destinationLink: publishingItem.destinationLink,
+        media: publishingItem.media,
+        platformMedia: publishingItem.platformApprovals
+          ? Object.fromEntries(
+              Object.entries(publishingItem.platformApprovals).map(
+                ([platform, approval]) => [
+                  platform,
+                  {
+                    filePath: approval.outputLocation,
+                    mimeType: "video/mp4",
+                    version: approval.version,
+                    videoId: approval.videoId,
+                  },
+                ],
+              ),
+            )
+          : undefined,
+      });
+
+      await autonomousContentCycleEngine.approve(
+        reviewItem.executionPlanId,
+        reviewItem as unknown as Record<string, unknown>,
       );
 
-      await writeJson(
-        reviewFile,
-        reviewQueue,
-      );
-
-      await writeJson(
-        publishingFile,
-        publishingQueue,
-      );
+      if (publishingItem.status === "scheduled") {
+        await growthPlanExecutionEngine.transition(
+          reviewItem.executionPlanId,
+          "scheduled",
+        );
+      }
 
       return NextResponse.json({
         success: true,
 
-        item:
-          publishingItem,
+        item: publishingItem,
+
+        publishingHandoffs,
 
         message:
-          "Approved and moved to the Publishing Queue.",
+          "Approved and moved to the Publishing Queue with its platform handoff prepared.",
       });
     }
 
-    const reason =
-      cleanString(
-        body.reason,
-      ) ||
-      cleanString(
-        body.idea,
-      );
+    const reason = cleanString(body.reason) || cleanString(body.idea);
 
-    const newItem:
-      ReviewItem = {
-      id:
-        crypto.randomUUID(),
+    const newItem: ReviewItem = {
+      id: crypto.randomUUID(),
 
-      createdAt:
-        new Date()
-          .toISOString(),
+      createdAt: new Date().toISOString(),
 
-      status:
-        "needs_review",
+      status: "needs_review",
 
-      executionPlanId:
-        cleanString(
-          body.executionPlanId,
-        ),
+      executionPlanId: cleanString(body.executionPlanId),
 
-      idea:
-        cleanString(
-          body.idea,
-        ) ||
-        reason,
+      idea: cleanString(body.idea) || reason,
 
-      hook:
-        cleanString(
-          body.hook,
-        ),
+      hook: cleanString(body.hook),
 
-      title:
-        cleanString(
-          body.title,
-        ) ||
-        "Untitled content package",
+      title: cleanString(body.title) || "Untitled content package",
 
-      script:
-        cleanString(
-          body.script,
-        ),
+      script: cleanString(body.script),
 
-      caption:
-        cleanString(
-          body.caption,
-        ),
+      caption: cleanString(body.caption),
 
-      hashtags:
-        cleanStringArray(
-          body.hashtags,
-        ),
+      hashtags: cleanStringArray(body.hashtags),
 
-      thumbnailIdea:
-        cleanString(
-          body.thumbnailIdea,
-        ),
+      thumbnailIdea: cleanString(body.thumbnailIdea),
 
-      callToAction:
-        cleanString(
-          body.callToAction,
-        ),
+      callToAction: cleanString(body.callToAction),
 
-      audience:
-        cleanString(
-          body.audience,
-        ),
+      audience: cleanString(body.audience),
 
-      recommendedPlatforms:
-        cleanStringArray(
-          body.recommendedPlatforms,
-        ),
+      recommendedPlatforms: cleanStringArray(body.recommendedPlatforms),
 
-      videoPlan:
-        cleanVideoPlan(
-          body.videoPlan,
-        ),
+      videoPlan: cleanVideoPlan(body.videoPlan),
 
       reason,
 
-      format:
-        cleanFormat(
-          body.format,
-        ),
+      format: cleanFormat(body.format),
 
-      destinationLink:
-        cleanString(
-          body.destinationLink,
-        ),
+      destinationLink: cleanString(body.destinationLink),
 
       pinnedComment:
-        cleanString(
-          body.pinnedComment,
-        ) ||
-        cleanString(
-          body.callToAction,
-        ),
+        cleanString(body.pinnedComment) || cleanString(body.callToAction),
 
-      media:
-        cleanMedia(
-          body.media,
-        ),
+      media: cleanMedia(body.media),
+
+      growthPlan:
+        body.growthPlan && typeof body.growthPlan === "object"
+          ? (body.growthPlan as ContentPackage["growthPlan"])
+          : undefined,
+
+      adaptiveCreation:
+        body.adaptiveCreation && typeof body.adaptiveCreation === "object"
+          ? (body.adaptiveCreation as ContentPackage["adaptiveCreation"])
+          : undefined,
     };
 
-    const queue =
-      await readJson<
-        ReviewItem
-      >(
-        reviewFile,
-      );
+    const queue = await readJson<ReviewItem>(reviewFile);
 
-    queue.unshift(
-      newItem,
-    );
+    queue.unshift(newItem);
 
-    await writeJson(
-      reviewFile,
-      queue,
-    );
+    await writeJson(reviewFile, queue);
 
     return NextResponse.json({
       success: true,
 
-      item:
-        newItem,
+      item: newItem,
 
-      message:
-        "Content package added to the Review Queue.",
+      message: "Content package added to the Review Queue.",
     });
-  } catch (
-    error
-  ) {
-    console.error(
-      "Review Queue operation failed:",
-      error,
-    );
+  } catch (error) {
+    console.error("Review Queue operation failed:", error);
 
     return NextResponse.json(
       {
         success: false,
 
-        message:
-          "Review Queue operation failed.",
+        message: "Review Queue operation failed.",
       },
       {
         status: 500,

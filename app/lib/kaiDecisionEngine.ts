@@ -30,6 +30,10 @@ export type BusinessSignal = {
   importance: SignalImportance;
   source?: string;
   createdAt?: string;
+  learningOutcome?:
+    | "success"
+    | "partial"
+    | "failure";
 };
 
 export type KaiQuestion = {
@@ -256,6 +260,31 @@ function sortSignalsByImportance(
   );
 }
 
+function combineEvidence(
+  suppliedSignals: BusinessSignal[],
+): BusinessSignal[] {
+  const byId =
+    new Map<
+      string,
+      BusinessSignal
+    >();
+
+  [
+    ...defaultSignals,
+    ...suppliedSignals,
+  ].forEach(
+    (signal) =>
+      byId.set(
+        signal.id,
+        signal,
+      ),
+  );
+
+  return Array.from(
+    byId.values(),
+  );
+}
+
 function sortOpportunities(
   opportunities: KaiOpportunity[],
 ): KaiOpportunity[] {
@@ -278,6 +307,179 @@ function sortOpportunities(
 
     return a.effort - b.effort;
   });
+}
+
+const OUTCOME_MATCH_STOP_WORDS =
+  new Set([
+    "about",
+    "after",
+    "again",
+    "business",
+    "content",
+    "create",
+    "current",
+    "from",
+    "into",
+    "kai",
+    "move",
+    "next",
+    "prepare",
+    "result",
+    "strongest",
+    "that",
+    "this",
+    "today",
+    "toward",
+    "with",
+  ]);
+
+function outcomeMatchTokens(
+  value: string,
+): Set<string> {
+  return new Set(
+    value
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .map((token) =>
+        token.trim(),
+      )
+      .filter(
+        (token) =>
+          token.length >= 4 &&
+          !OUTCOME_MATCH_STOP_WORDS.has(
+            token,
+          ),
+      ),
+  );
+}
+
+function signalMatchesOpportunity(
+  signal: BusinessSignal,
+  opportunity: KaiOpportunity,
+): boolean {
+  if (
+    !signal.learningOutcome
+  ) {
+    return false;
+  }
+
+  const signalTokens =
+    outcomeMatchTokens([
+      signal.label,
+      signal.observation,
+      signal.pattern,
+      signal.meaning,
+    ].join(" "));
+
+  const opportunityTokens =
+    outcomeMatchTokens([
+      opportunity.id,
+      opportunity.title,
+      opportunity.category,
+      opportunity.recommendation,
+      opportunity.reason,
+    ].join(" "));
+
+  const sharedTokens =
+    Array.from(
+      signalTokens,
+    ).filter(
+      (token) =>
+        opportunityTokens.has(
+          token,
+        ),
+    );
+
+  return sharedTokens.length >= 2;
+}
+
+function applyOutcomeEvidence(
+  opportunities: KaiOpportunity[],
+  signals: BusinessSignal[],
+): KaiOpportunity[] {
+  return opportunities.map(
+    (opportunity) => {
+      const matchingSignals =
+        signals.filter(
+          (signal) =>
+            signalMatchesOpportunity(
+              signal,
+              opportunity,
+            ),
+        );
+
+      if (
+        matchingSignals.length === 0
+      ) {
+        return opportunity;
+      }
+
+      const successCount =
+        matchingSignals.filter(
+          (signal) =>
+            signal.learningOutcome ===
+            "success",
+        ).length;
+
+      const partialCount =
+        matchingSignals.filter(
+          (signal) =>
+            signal.learningOutcome ===
+            "partial",
+        ).length;
+
+      const failureCount =
+        matchingSignals.filter(
+          (signal) =>
+            signal.learningOutcome ===
+            "failure",
+        ).length;
+
+      const scoreAdjustment =
+        successCount * 12 +
+        partialCount * 2 -
+        failureCount * 20;
+
+      const confidenceAdjustment =
+        successCount * 5 -
+        partialCount * 3 -
+        failureCount * 12;
+
+      const outcomeExplanation =
+        failureCount > 0
+          ? "A relevant past execution failed, so KAI lowered this option and will not repeat the same approach unchanged."
+          : partialCount > 0
+            ? "A relevant past execution produced mixed results, so KAI kept this option available but reduced certainty until the weak parts are adjusted."
+            : "A relevant past execution succeeded, so KAI strengthened this option using measured evidence.";
+
+      return {
+        ...opportunity,
+
+        confidence:
+          clampScore(
+            opportunity.confidence +
+              confidenceAdjustment,
+          ),
+
+        priorityScore:
+          clampScore(
+            opportunity.priorityScore +
+              scoreAdjustment,
+          ),
+
+        reason:
+          `${opportunity.reason} ${outcomeExplanation}`,
+
+        changeToday:
+          failureCount > 0
+            ? [
+                "Change the failed approach before repeating this opportunity.",
+                ...opportunity.changeToday,
+              ]
+            : opportunity.changeToday,
+      };
+    },
+  );
 }
 
 function calculateEvidenceConfidence(
@@ -1065,9 +1267,9 @@ export function runKaiDecisionEngine(
 
   const evidence =
     sortSignalsByImportance(
-      suppliedSignals.length > 0
-        ? suppliedSignals
-        : defaultSignals,
+      combineEvidence(
+        suppliedSignals,
+      ),
     );
 
   const strongestSignal =
@@ -1077,9 +1279,14 @@ export function runKaiDecisionEngine(
     calculateEvidenceConfidence(evidence);
 
   const opportunities =
-    buildOpportunities(
-      input,
-      evidenceConfidence,
+    sortOpportunities(
+      applyOutcomeEvidence(
+        buildOpportunities(
+          input,
+          evidenceConfidence,
+        ),
+        evidence,
+      ),
     );
 
   const topOpportunity =

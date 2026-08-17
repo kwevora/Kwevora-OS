@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import PlatformConnections from "../components/PlatformConnections";
 
 type PlatformId =
   | "youtube"
@@ -588,6 +589,8 @@ export default function SettingsPage() {
             )}
           </div>
         </section>
+
+        <PlatformConnections />
 
         <section className="rounded-3xl border border-amber-400/20 bg-amber-400/5 p-8">
           <p className="text-sm font-bold uppercase tracking-[0.3em] text-amber-300">

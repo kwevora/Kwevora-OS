@@ -51,10 +51,19 @@ type YouTubeUploadResponse = {
 
 type PrivacyStatus = "private" | "unlisted" | "public";
 
-const dataFolder = path.join(process.cwd(), "data");
+const dataFolder = path.join(
+  /* turbopackIgnore: true */ process.cwd(),
+  "data",
+);
 const uploadsFolder = path.join(
   dataFolder,
   "video-uploads"
+);
+
+const generatedVideosFolder = path.join(
+  /* turbopackIgnore: true */ process.cwd(),
+  "public",
+  "generated-videos"
 );
 
 function cleanString(value: unknown): string {
@@ -148,24 +157,19 @@ function resolveVideoFile(
     return null;
   }
 
-  const resolvedUploadsFolder =
-    path.resolve(uploadsFolder);
-
+  const normalizedPath = videoPath.replace(/\\/g, "/");
+  const selectedFolder = normalizedPath.includes("/generated-videos/")
+    ? generatedVideosFolder
+    : uploadsFolder;
+  const resolvedFolder = path.resolve(selectedFolder);
   const resolvedFilePath = path.resolve(
-    uploadsFolder,
-    requestedFileName
+    /* turbopackIgnore: true */ selectedFolder,
+    requestedFileName,
   );
 
-  const requiredPrefix =
-    resolvedUploadsFolder + path.sep;
-
-  if (
-    !resolvedFilePath.startsWith(requiredPrefix)
-  ) {
-    return null;
-  }
-
-  return resolvedFilePath;
+  return resolvedFilePath.startsWith(resolvedFolder + path.sep)
+    ? resolvedFilePath
+    : null;
 }
 
 async function readResponseJson<T>(

@@ -1,16 +1,11 @@
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 
 import { randomUUID } from "crypto";
 import path from "path";
 
-import type {
-  ContentPackage,
-} from "../ContentIntelligenceEngine";
+import type { ContentPackage } from "../ContentIntelligenceEngine";
+
+import { approvalIntelligenceEngine } from "../ApprovalIntelligenceEngine";
 
 export type ReviewQueueItem = {
   id: string;
@@ -38,10 +33,7 @@ export type ReviewQueueItem = {
 
   reason: string;
 
-  format:
-    | "faceless_video"
-    | "record_yourself"
-    | "upload_video";
+  format: "faceless_video" | "record_yourself" | "upload_video";
 
   destinationLink: string;
   pinnedComment: string;
@@ -51,36 +43,20 @@ export type ReviewQueueItem = {
   estimatedBusinessImpact?: string;
   followUpIdeas?: string[];
   sourceOpportunityId?: string;
+  approvalIntelligence?: ContentPackage["approvalIntelligence"];
 };
 
-const dataFolder = path.join(
-  process.cwd(),
-  "data",
-);
+const dataFolder = path.join(process.cwd(), "data");
 
-const reviewQueueFile = path.join(
-  dataFolder,
-  "review-queue.json",
-);
+const reviewQueueFile = path.join(dataFolder, "review-queue.json");
 
 function ensureReviewQueueFile(): void {
-  mkdirSync(
-    dataFolder,
-    {
-      recursive: true,
-    },
-  );
+  mkdirSync(dataFolder, {
+    recursive: true,
+  });
 
-  if (
-    !existsSync(
-      reviewQueueFile,
-    )
-  ) {
-    writeFileSync(
-      reviewQueueFile,
-      "[]",
-      "utf8",
-    );
+  if (!existsSync(reviewQueueFile)) {
+    writeFileSync(reviewQueueFile, "[]", "utf8");
   }
 }
 
@@ -88,156 +64,107 @@ function contentPackageToReviewItem(
   contentPackage: ContentPackage,
 ): ReviewQueueItem {
   return {
-    id:
-      randomUUID(),
+    id: randomUUID(),
 
-    createdAt:
-      new Date().toISOString(),
+    createdAt: new Date().toISOString(),
 
-    status:
-      "needs_review",
+    status: "needs_review",
 
-    idea:
-      contentPackage.idea,
+    idea: contentPackage.idea,
 
-    hook:
-      contentPackage.hook,
+    hook: contentPackage.hook,
 
-    title:
-      contentPackage.title,
+    title: contentPackage.title,
 
-    script:
-      contentPackage.script,
+    script: contentPackage.script,
 
-    caption:
-      contentPackage.caption,
+    caption: contentPackage.caption,
 
-    hashtags:
-      contentPackage.hashtags,
+    hashtags: contentPackage.hashtags,
 
-    thumbnailIdea:
-      contentPackage.thumbnailIdea,
+    thumbnailIdea: contentPackage.thumbnailIdea,
 
-    callToAction:
-      contentPackage.callToAction,
+    callToAction: contentPackage.callToAction,
 
-    audience:
-      contentPackage.audience,
+    audience: contentPackage.audience,
 
-    recommendedPlatforms:
-      contentPackage.recommendedPlatforms,
+    recommendedPlatforms: contentPackage.recommendedPlatforms,
 
     videoPlan: {
-      openingText:
-        contentPackage.videoPlan
-          .openingText,
+      openingText: contentPackage.videoPlan.openingText,
 
-      scenes:
-        contentPackage.videoPlan
-          .scenes,
+      scenes: contentPackage.videoPlan.scenes,
 
-      endingText:
-        contentPackage.videoPlan
-          .endingText,
+      endingText: contentPackage.videoPlan.endingText,
 
-      estimatedLengthSeconds:
-        contentPackage.videoPlan
-          .estimatedLengthSeconds,
+      estimatedLengthSeconds: contentPackage.videoPlan.estimatedLengthSeconds,
     },
 
-    reason:
-      contentPackage.reason,
+    reason: contentPackage.reason,
 
-    format:
-      contentPackage.format,
+    format: contentPackage.format,
 
-    destinationLink:
-      contentPackage.destinationLink,
+    destinationLink: contentPackage.destinationLink,
 
-    pinnedComment:
-      contentPackage.pinnedComment,
+    pinnedComment: contentPackage.pinnedComment,
 
-    suggestedPostingTime:
-      contentPackage
-        .suggestedPostingTime,
+    suggestedPostingTime: contentPackage.suggestedPostingTime,
 
-    confidence:
-      contentPackage.confidence,
+    confidence: contentPackage.confidence,
 
-    estimatedBusinessImpact:
-      contentPackage
-        .estimatedBusinessImpact,
+    estimatedBusinessImpact: contentPackage.estimatedBusinessImpact,
 
-    followUpIdeas:
-      contentPackage.followUpIdeas,
+    followUpIdeas: contentPackage.followUpIdeas,
 
-    sourceOpportunityId:
-      contentPackage
-        .sourceOpportunityId,
+    sourceOpportunityId: contentPackage.sourceOpportunityId,
+
+    approvalIntelligence: contentPackage.approvalIntelligence,
   };
 }
 
 export class ReviewQueueStore {
-  read():
-    ReviewQueueItem[] {
+  read(): ReviewQueueItem[] {
     ensureReviewQueueFile();
 
     try {
-      const raw =
-        readFileSync(
-          reviewQueueFile,
-          "utf8",
-        );
+      const raw = readFileSync(reviewQueueFile, "utf8");
 
-      const parsed: unknown =
-        JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
 
-      return Array.isArray(parsed)
-        ? parsed as ReviewQueueItem[]
-        : [];
+      return Array.isArray(parsed) ? (parsed as ReviewQueueItem[]) : [];
     } catch {
       return [];
     }
   }
 
-  write(
-    queue: ReviewQueueItem[],
-  ): void {
+  write(queue: ReviewQueueItem[]): void {
     ensureReviewQueueFile();
 
-    writeFileSync(
-      reviewQueueFile,
-      JSON.stringify(
-        queue,
-        null,
-        2,
-      ),
-      "utf8",
-    );
+    writeFileSync(reviewQueueFile, JSON.stringify(queue, null, 2), "utf8");
   }
 
-  addContentPackage(
+  async addContentPackage(
     contentPackage: ContentPackage,
-  ): ReviewQueueItem {
-    const queue =
-      this.read();
+  ): Promise<ReviewQueueItem> {
+    const queue = this.read();
 
-    const reviewItem =
-      contentPackageToReviewItem(
-        contentPackage,
-      );
+    const preparedContent =
+      await approvalIntelligenceEngine.prepare(contentPackage);
 
-    queue.unshift(
-      reviewItem,
+    const reviewItem = contentPackageToReviewItem(preparedContent);
+
+    queue.push(reviewItem);
+
+    queue.sort(
+      (left, right) =>
+        (right.approvalIntelligence?.reviewPriority ?? 0) -
+        (left.approvalIntelligence?.reviewPriority ?? 0),
     );
 
-    this.write(
-      queue,
-    );
+    this.write(queue);
 
     return reviewItem;
   }
 }
 
-export const reviewQueueStore =
-  new ReviewQueueStore();
+export const reviewQueueStore = new ReviewQueueStore();

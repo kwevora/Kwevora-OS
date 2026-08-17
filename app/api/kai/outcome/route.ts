@@ -1,26 +1,14 @@
-import {
-  NextRequest,
-  NextResponse,
-} from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-import {
-  executionPlanRepository,
-} from "@/app/lib/database/ExecutionPlanRepository";
+import { executionPlanRepository } from "@/app/lib/database/ExecutionPlanRepository";
 
-import {
-  outcomeEvaluationRepository,
-} from "@/app/lib/database/OutcomeEvaluationRepository";
+import { outcomeEvaluationRepository } from "@/app/lib/database/OutcomeEvaluationRepository";
 
-import {
-  outcomeEngine,
-  type OutcomeMetric,
-} from "@/app/lib/OutcomeEngine";
+import { outcomeEngine, type OutcomeMetric } from "@/app/lib/OutcomeEngine";
 
-export const runtime =
-  "nodejs";
+export const runtime = "nodejs";
 
-export const dynamic =
-  "force-dynamic";
+export const dynamic = "force-dynamic";
 
 type OutcomeRequestBody = {
   executionPlanId?: unknown;
@@ -30,94 +18,48 @@ type OutcomeRequestBody = {
   observations?: unknown;
 };
 
-function cleanString(
-  value: unknown,
-): string {
-  return typeof value === "string"
-    ? value.trim()
-    : "";
+function cleanString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
-function cleanStringArray(
-  value: unknown,
-): string[] {
-  if (
-    !Array.isArray(
-      value,
-    )
-  ) {
+function cleanStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
     return [];
   }
 
   return value
-    .filter(
-      (
-        item,
-      ): item is string =>
-        typeof item === "string",
-    )
-    .map(
-      (item) =>
-        item.trim(),
-    )
-    .filter(
-      Boolean,
-    );
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
-function cleanMetric(
-  value: unknown,
-): OutcomeMetric | null {
-  if (
-    !value ||
-    typeof value !== "object"
-  ) {
+function cleanMetric(value: unknown): OutcomeMetric | null {
+  if (!value || typeof value !== "object") {
     return null;
   }
 
-  const metric =
-    value as Record<
-      string,
-      unknown
-    >;
+  const metric = value as Record<string, unknown>;
 
-  const name =
-    cleanString(
-      metric.name,
-    );
+  const name = cleanString(metric.name);
 
-  const actual =
-    metric.actual;
+  const actual = metric.actual;
 
-  if (
-    !name ||
-    typeof actual !== "number" ||
-    !Number.isFinite(
-      actual,
-    )
-  ) {
+  if (!name || typeof actual !== "number" || !Number.isFinite(actual)) {
     return null;
   }
 
   const target =
-    typeof metric.target === "number" &&
-    Number.isFinite(
-      metric.target,
-    )
+    typeof metric.target === "number" && Number.isFinite(metric.target)
       ? metric.target
       : undefined;
 
   const previous =
-    typeof metric.previous === "number" &&
-    Number.isFinite(
-      metric.previous,
-    )
+    typeof metric.previous === "number" && Number.isFinite(metric.previous)
       ? metric.previous
       : undefined;
 
   const higherIsBetter =
-    typeof metric.higherIsBetter ===
-    "boolean"
+    typeof metric.higherIsBetter === "boolean"
       ? metric.higherIsBetter
       : undefined;
 
@@ -134,73 +76,41 @@ function cleanMetric(
   };
 }
 
-function cleanMetrics(
-  value: unknown,
-): OutcomeMetric[] {
-  if (
-    !Array.isArray(
-      value,
-    )
-  ) {
+function cleanMetrics(value: unknown): OutcomeMetric[] {
+  if (!Array.isArray(value)) {
     return [];
   }
 
   return value
-    .map(
-      cleanMetric,
-    )
-    .filter(
-      (
-        metric,
-      ): metric is OutcomeMetric =>
-        metric !== null,
-    );
+    .map(cleanMetric)
+    .filter((metric): metric is OutcomeMetric => metric !== null);
 }
 
-export async function GET(
-  request: NextRequest,
-) {
+export async function GET(request: NextRequest) {
   try {
-    const executionPlanId =
-      request.nextUrl.searchParams.get(
-        "executionPlanId",
-      );
+    const executionPlanId = request.nextUrl.searchParams.get("executionPlanId");
 
-    if (
-      executionPlanId
-    ) {
-      const plan =
-        executionPlanRepository.get(
-          executionPlanId,
-        );
+    if (executionPlanId) {
+      const plan = await executionPlanRepository.get(executionPlanId);
 
-      if (
-        !plan
-      ) {
+      if (!plan) {
         return NextResponse.json(
           {
-            success:
-              false,
+            success: false,
 
-            message:
-              "Execution plan not found.",
+            message: "Execution plan not found.",
           },
           {
-            status:
-              404,
+            status: 404,
           },
         );
       }
 
       const outcomes =
-        outcomeEvaluationRepository
-          .forExecutionPlan(
-            executionPlanId,
-          );
+        await outcomeEvaluationRepository.forExecutionPlan(executionPlanId);
 
       return NextResponse.json({
-        success:
-          true,
+        success: true,
 
         plan,
 
@@ -209,175 +119,115 @@ export async function GET(
     }
 
     return NextResponse.json({
-      success:
-        true,
+      success: true,
 
-      latest:
-        executionPlanRepository.latest(),
+      latest: await executionPlanRepository.latest(),
 
-      active:
-        executionPlanRepository.active(),
+      active: await executionPlanRepository.active(),
 
-      latestOutcome:
-        outcomeEvaluationRepository.latest(),
+      latestOutcome: await outcomeEvaluationRepository.latest(),
 
-      recentOutcomes:
-        outcomeEvaluationRepository.history(
-          20,
-        ),
+      recentOutcomes: await outcomeEvaluationRepository.history(20),
     });
-  } catch (
-    error
-  ) {
-    console.error(
-      "Outcome API load failed:",
-      error,
-    );
+  } catch (error) {
+    console.error("Outcome API load failed:", error);
 
     return NextResponse.json(
       {
-        success:
-          false,
+        success: false,
 
-        message:
-          "KWEVORA could not load execution outcome data.",
+        message: "KWEVORA could not load execution outcome data.",
       },
       {
-        status:
-          500,
+        status: 500,
       },
     );
   }
 }
 
-export async function POST(
-  request: NextRequest,
-) {
+export async function POST(request: NextRequest) {
   try {
-    const body =
-      (
-        await request.json()
-      ) as OutcomeRequestBody;
+    const body = (await request.json()) as OutcomeRequestBody;
 
-    const executionPlanId =
-      cleanString(
-        body.executionPlanId,
-      );
+    const executionPlanId = cleanString(body.executionPlanId);
 
-    if (
-      !executionPlanId
-    ) {
+    if (!executionPlanId) {
       return NextResponse.json(
         {
-          success:
-            false,
+          success: false,
 
-          message:
-            "An execution plan ID is required.",
+          message: "An execution plan ID is required.",
         },
         {
-          status:
-            400,
+          status: 400,
         },
       );
     }
 
-    const executionPlan =
-      executionPlanRepository.get(
-        executionPlanId,
-      );
+    const executionPlan = await executionPlanRepository.get(executionPlanId);
 
-    if (
-      !executionPlan
-    ) {
+    if (!executionPlan) {
       return NextResponse.json(
         {
-          success:
-            false,
+          success: false,
 
-          message:
-            "Execution plan not found.",
+          message: "Execution plan not found.",
         },
         {
-          status:
-            404,
+          status: 404,
         },
       );
     }
 
-    const metrics =
-      cleanMetrics(
-        body.metrics,
-      );
+    const metrics = cleanMetrics(body.metrics);
 
-    const observations =
-      cleanStringArray(
-        body.observations,
-      );
+    const observations = cleanStringArray(body.observations);
 
-    if (
-      metrics.length === 0 &&
-      observations.length === 0
-    ) {
+    if (metrics.length === 0 && observations.length === 0) {
       return NextResponse.json(
         {
-          success:
-            false,
+          success: false,
 
           message:
             "KAI needs at least one measured result or observation before learning from this execution.",
         },
         {
-          status:
-            400,
+          status: 400,
         },
       );
     }
 
-    const result =
-      outcomeEngine.evaluate({
-        executionPlan,
+    const result = await outcomeEngine.evaluate({
+      executionPlan,
 
-        metrics,
+      metrics,
 
-        observations,
+      observations,
 
-        completedAt:
-          new Date().toISOString(),
-      });
+      completedAt: new Date().toISOString(),
+    });
 
     return NextResponse.json({
-      success:
-        true,
+      success: true,
 
-      evaluation:
-        result.evaluation,
+      evaluation: result.evaluation,
 
-      storedEvaluation:
-        result.storedEvaluation,
+      storedEvaluation: result.storedEvaluation,
 
       message:
         "KAI measured the result, learned from it, and updated the execution plan.",
     });
-  } catch (
-    error
-  ) {
-    console.error(
-      "Outcome evaluation failed:",
-      error,
-    );
+  } catch (error) {
+    console.error("Outcome evaluation failed:", error);
 
     return NextResponse.json(
       {
-        success:
-          false,
+        success: false,
 
-        message:
-          "KWEVORA could not evaluate this outcome.",
+        message: "KWEVORA could not evaluate this outcome.",
       },
       {
-        status:
-          500,
+        status: 500,
       },
     );
   }

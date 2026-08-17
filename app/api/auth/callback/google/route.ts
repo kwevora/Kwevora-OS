@@ -1,57 +1,62 @@
-import { google } from "googleapis";
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+type GoogleTokenResponse = {
+  access_token?: string;
+  expires_in?: number;
+  refresh_token?: string;
+  error?: string;
+  error_description?: string;
+};
+
+type YouTubeChannelResponse = {
+  items?: Array<{ id?: string; snippet?: { title?: string } }>;
+  error?: { message?: string };
+};
+
+function settingsRedirect(
+  request: NextRequest,
+  status: "connected" | "error",
+  reason?: string,
+) {
+  const url = new URL("/settings", request.url);
+  url.searchParams.set("youtube", status);
+  if (reason) url.searchParams.set("reason", reason.slice(0, 180));
+  return NextResponse.redirect(url);
+}
 
 export async function GET(request: NextRequest) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Google credentials are missing from .env.local.",
-      },
-      { status: 500 }
+    return settingsRedirect(
+      request,
+      "error",
+      "Google credentials are missing in Cloudflare.",
     );
   }
 
   const code = request.nextUrl.searchParams.get("code");
   const oauthError = request.nextUrl.searchParams.get("error");
   const returnedState = request.nextUrl.searchParams.get("state");
-  const storedState = request.cookies.get(
-    "kwevora-youtube-oauth-state"
-  )?.value;
+  const storedState = request.cookies.get("kwevora-youtube-oauth-state")?.value;
 
-  if (oauthError) {
-    return NextResponse.redirect(
-      new URL(
-        `/video-studio?youtube=error&reason=${encodeURIComponent(
-          oauthError
-        )}`,
-        request.url
-      )
-    );
-  }
-
+  if (oauthError) return settingsRedirect(request, "error", oauthError);
   if (!returnedState || returnedState !== storedState) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: "OAuth state validation failed.",
-      },
-      { status: 400 }
+    return settingsRedirect(
+      request,
+      "error",
+      "OAuth state validation failed. Please try once more.",
     );
   }
-
   if (!code) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Google did not return an authorization code.",
-      },
-      { status: 400 }
+    return settingsRedirect(
+      request,
+      "error",
+      "Google did not return an authorization code.",
     );
   }
 
@@ -59,99 +64,74 @@ export async function GET(request: NextRequest) {
     process.env.GOOGLE_REDIRECT_URI ||
     `${request.nextUrl.origin}/api/auth/callback/google`;
 
-  const oauth2Client = new google.auth.OAuth2(
-    clientId,
-    clientSecret,
-    redirectUri
-  );
-
   try {
-    const { tokens } = await oauth2Client.getToken(code);
-
-    oauth2Client.setCredentials(tokens);
-
-    const youtube = google.youtube({
-      version: "v3",
-      auth: oauth2Client,
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code,
+        grant_type: "authorization_code",
+        redirect_uri: redirectUri,
+      }),
     });
 
-    const channelResponse = await youtube.channels.list({
-      part: ["snippet"],
-      mine: true,
-    });
-
-    const channel = channelResponse.data.items?.[0];
-
-    const response = NextResponse.redirect(
-      new URL("/video-studio?youtube=connected", request.url)
-    );
-
-    const secureCookie =
-      process.env.NODE_ENV === "production";
-
-    response.cookies.set(
-      "kwevora_youtube_channel_id",
-      channel?.id ?? "",
-      {
-        httpOnly: true,
-        secure: secureCookie,
-        sameSite: "lax",
-        path: "/",
-        maxAge: 60 * 60 * 24 * 30,
-      }
-    );
-
-    response.cookies.set(
-      "kwevora_youtube_channel_name",
-      channel?.snippet?.title ??
-        "Connected YouTube Channel",
-      {
-        httpOnly: true,
-        secure: secureCookie,
-        sameSite: "lax",
-        path: "/",
-        maxAge: 60 * 60 * 24 * 30,
-      }
-    );
-
-    if (tokens.access_token) {
-      response.cookies.set(
-        "kwevora_youtube_access_token",
-        tokens.access_token,
-        {
-          httpOnly: true,
-          secure: secureCookie,
-          sameSite: "lax",
-          path: "/",
-          maxAge: 60 * 60,
-        }
+    const tokens = (await tokenResponse.json()) as GoogleTokenResponse;
+    if (!tokenResponse.ok || !tokens.access_token) {
+      throw new Error(
+        tokens.error_description || tokens.error || "Google token exchange failed.",
       );
     }
 
+    const channelResponse = await fetch(
+      "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",
+      { headers: { Authorization: `Bearer ${tokens.access_token}` } },
+    );
+    const channelData = (await channelResponse.json()) as YouTubeChannelResponse;
+    if (!channelResponse.ok) {
+      throw new Error(
+        channelData.error?.message || "YouTube channel lookup failed.",
+      );
+    }
+
+    const channel = channelData.items?.[0];
+    if (!channel?.id) {
+      throw new Error("No YouTube channel was found for this Google account.");
+    }
+
+    const response = settingsRedirect(request, "connected");
+    const cookieOptions = {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax" as const,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    };
+
+    response.cookies.set("kwevora_youtube_channel_id", channel.id, cookieOptions);
+    response.cookies.set(
+      "kwevora_youtube_channel_name",
+      channel.snippet?.title || "Connected YouTube Channel",
+      cookieOptions,
+    );
+    response.cookies.set("kwevora_youtube_access_token", tokens.access_token, {
+      ...cookieOptions,
+      maxAge: Math.max(300, tokens.expires_in || 3600),
+    });
     if (tokens.refresh_token) {
       response.cookies.set(
         "kwevora_youtube_refresh_token",
         tokens.refresh_token,
-        {
-          httpOnly: true,
-          secure: secureCookie,
-          sameSite: "lax",
-          path: "/",
-          maxAge: 60 * 60 * 24 * 30,
-        }
+        cookieOptions,
       );
     }
-
-    response.cookies.delete(
-      "kwevora-youtube-oauth-state"
-    );
-
+    response.cookies.delete("kwevora-youtube-oauth-state");
     return response;
   } catch (error) {
-    console.error("YouTube OAuth callback failed:", error);
-
-    return NextResponse.redirect(
-      new URL("/video-studio?youtube=error", request.url)
-    );
+    const reason =
+      error instanceof Error ? error.message : "YouTube authorization failed.";
+    console.error("YouTube OAuth callback failed:", reason);
+    return settingsRedirect(request, "error", reason);
   }
 }

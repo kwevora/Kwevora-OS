@@ -88,6 +88,8 @@ export type KaiCreativeScene = {
   threeDimensionalDirection?: string;
 
   soundDesign?: string[];
+  visualSource?: "stock" | "product";
+  productAssetIndex?: number;
 };
 
 export type KaiCreativeConcept = {

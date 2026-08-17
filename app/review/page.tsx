@@ -27,6 +27,57 @@ type ReviewItem = {
   format: string;
   destinationLink: string;
   pinnedComment: string;
+  adaptiveCreation?: {
+    mode: "proven_winner" | "controlled_challenger" | "learning";
+    changedVariable: string | null;
+    whyKaiCreatedThis: string;
+    decisions: Array<{ dimension: string; value: string; action: string; evidenceCount: number; explanation: string }>;
+    platformVariants: Array<{ platform: string; hook: string; caption: string; callToAction: string; estimatedLengthSeconds: number }>;
+  };
+  videoProduction?: {
+    videoId: string;
+    status: "ready_for_review";
+    videoUrl: string;
+    whyKaiDirectedItThisWay?: string;
+    reviewRequired: true;
+    direction?: {
+      platform: string;
+      pace: string;
+      textDensity: string;
+      changedVariable: string | null;
+      evidence: string[];
+    };
+    currentVersion?: number;
+    versions?: Array<{
+      version: number;
+      videoId: string;
+      videoUrl: string;
+      outputLocation: string;
+      createdAt: string;
+      changeType: string;
+      request: string;
+      changes: string[];
+      platform: string;
+    }>;
+  };
+  videoDirectionFeedback?: string;
+  media?: {
+    source: string;
+    fileName: string;
+    storedFileName: string;
+    mimeType: string;
+    size: number;
+    filePath: string;
+    videoUrl?: string;
+  };
+  platformApprovals?: Record<string, {
+    platform: string;
+    version: number;
+    videoId: string;
+    videoUrl: string;
+    outputLocation: string;
+    approvedAt: string;
+  }>;
 };
 
 type ReviewResponse = {
@@ -39,6 +90,8 @@ export default function ReviewPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [revisingId, setRevisingId] = useState<string | null>(null);
+  const [previewVersions, setPreviewVersions] = useState<Record<string, number>>({});
 
   useEffect(() => {
     async function loadReviewQueue() {
@@ -108,6 +161,90 @@ export default function ReviewPage() {
     }
   }
 
+  async function rejectItem(id: string) {
+    const reason = window.prompt("Tell KAI why you are rejecting this package:");
+    if (reason === null) return;
+    const response = await fetch("/api/review", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "reject", id, reason }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success) return setMessage(data.message || "KWEVORA could not reject this package.");
+    setItems((current) => current.filter((item) => item.id !== id));
+    setMessage(data.message);
+  }
+
+  async function editItem(item: ReviewItem) {
+    const title = window.prompt("Edit the title:", item.title);
+    if (title === null) return;
+    const hook = window.prompt("Edit the hook:", item.hook);
+    if (hook === null) return;
+    const caption = window.prompt("Edit the caption:", item.caption);
+    if (caption === null) return;
+    const callToAction = window.prompt("Edit the call to action:", item.callToAction);
+    if (callToAction === null) return;
+    const videoDirectionFeedback = item.videoProduction
+      ? window.prompt("What should KAI change about the finished video's look, pacing, voice, or music?", item.videoDirectionFeedback ?? "")
+      : "";
+    if (videoDirectionFeedback === null) return;
+    const response = await fetch("/api/review", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "edit", id: item.id, title, hook, caption, callToAction, videoDirectionFeedback }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success) return setMessage(data.message || "KWEVORA could not save these edits.");
+    setItems((current) => current.map((entry) => entry.id === item.id ? data.item : entry));
+    setMessage(data.message);
+  }
+
+  async function reviseVideo(item: ReviewItem) {
+    const targetValue = window.prompt("What should KAI revise? Type: scene, captions, voice, music, pacing, or platform", "scene");
+    if (targetValue === null) return;
+    const target = targetValue.trim().toLowerCase();
+    if (!["scene", "captions", "voice", "music", "pacing", "platform"].includes(target)) return setMessage("Choose scene, captions, voice, music, pacing, or platform.");
+    let sceneIndex: number | undefined;
+    let platform: string | undefined;
+    if (target === "scene") {
+      const sceneNumber = window.prompt(`Which scene? Enter 1 through ${item.videoPlan?.scenes?.length ?? 1}`, "1");
+      if (sceneNumber === null) return;
+      sceneIndex = Math.max(0, Number(sceneNumber) - 1);
+    }
+    if (target === "platform") {
+      platform = window.prompt("Which platform cut?", item.recommendedPlatforms[0] ?? "TikTok") ?? undefined;
+      if (!platform) return;
+    }
+    const instruction = window.prompt("Tell KAI exactly what you want changed:");
+    if (!instruction) return;
+    setRevisingId(item.id);
+    setMessage("KAI is revising only the requested part and rendering a new version...");
+    try {
+      const response = await fetch("/api/review/video-revision", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: item.id, target, instruction, sceneIndex, platform }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || "KAI could not revise this video.");
+      setItems((current) => current.map((entry) => entry.id === item.id ? data.item : entry));
+      setPreviewVersions((current) => ({ ...current, [item.id]: data.version.version }));
+      setMessage(data.message);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "KAI could not revise this video.");
+    } finally {
+      setRevisingId(null);
+    }
+  }
+
+  async function approvePlatformVersion(item: ReviewItem, platform: string, version: number) {
+    const response = await fetch("/api/review", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "approve_platform", id: item.id, platform, version }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success) return setMessage(data.message || "KWEVORA could not lock this platform version.");
+    setItems((current) => current.map((entry) => entry.id === item.id ? data.item : entry));
+    setMessage(data.message);
+  }
+
   return (
     <main className="min-h-screen bg-[#07040f] p-8 text-white">
       <div className="mx-auto max-w-7xl space-y-8">
@@ -169,6 +306,12 @@ export default function ReviewPage() {
             const scenes = Array.isArray(item.videoPlan?.scenes)
               ? item.videoPlan.scenes
               : [];
+            const versions = Array.isArray(item.videoProduction?.versions)
+              ? item.videoProduction.versions
+              : [];
+            const previewVersion = previewVersions[item.id] ?? item.videoProduction?.currentVersion ?? versions.at(-1)?.version;
+            const preview = versions.find((version) => version.version === previewVersion) ?? versions.at(-1);
+            const previewUrl = preview?.videoUrl || item.media?.videoUrl || item.videoProduction?.videoUrl;
 
             return (
               <article
@@ -209,8 +352,8 @@ export default function ReviewPage() {
                       />
 
                       <ReviewBlock
-                        label="Why KAI Chose This"
-                        value={item.reason}
+                        label="Why KAI Created This"
+                        value={item.adaptiveCreation?.whyKaiCreatedThis || item.reason}
                       />
 
                       <ReviewBlock
@@ -223,6 +366,20 @@ export default function ReviewPage() {
                         value={formatLabel(item.format)}
                       />
                     </div>
+
+                    {item.adaptiveCreation?.decisions?.length ? (
+                      <div className="mt-6 rounded-xl border border-purple-300/20 bg-black/20 p-4">
+                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-purple-200">Verified decisions behind this package</p>
+                        <div className="mt-3 space-y-2">
+                          {item.adaptiveCreation.decisions.slice(0, 8).map((decision, index) => (
+                            <p key={`${item.id}-decision-${index}`} className="text-sm leading-6 text-gray-300">
+                              <span className="font-bold text-white">{formatLabel(decision.dimension)}: {decision.value}</span>
+                              {` · ${decision.action} · ${decision.evidenceCount} verified result${decision.evidenceCount === 1 ? "" : "s"}`}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </section>
 
                   <section className="rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-6">
@@ -283,6 +440,76 @@ export default function ReviewPage() {
                     />
 
                     <div className="mt-6 grid gap-5">
+                      {item.videoProduction ? (
+                        <>
+                          {previewUrl ? (
+                            <div>
+                              <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">
+                                Finished Video · Version {preview?.version ?? item.videoProduction.currentVersion ?? 1}
+                              </p>
+                              <video
+                                key={previewUrl}
+                                className="mt-3 max-h-[680px] w-full rounded-2xl border border-white/10 bg-black"
+                                controls
+                                preload="metadata"
+                                src={previewUrl}
+                              />
+                              <p className="mt-2 text-sm text-gray-400">
+                                Pause, scrub, inspect timing, and replay any scene before approval.
+                              </p>
+                            </div>
+                          ) : null}
+                          <ReviewBlock
+                            label="Why KAI Directed It This Way"
+                            value={item.videoProduction.whyKaiDirectedItThisWay}
+                          />
+                          <ReviewBlock
+                            label="Video Direction"
+                            value={`${formatLabel(item.videoProduction.direction?.pace)} pacing · ${formatLabel(item.videoProduction.direction?.textDensity)} text · ${item.videoProduction.direction?.platform ?? "Selected platform"}${item.videoProduction.direction?.changedVariable ? ` · controlled change: ${formatLabel(item.videoProduction.direction.changedVariable)}` : ""}`}
+                          />
+                          {versions.length > 0 ? (
+                            <div>
+                              <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Compare Versions</p>
+                              <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                                {versions.map((version) => (
+                                  <button
+                                    key={`${item.id}-version-${version.version}`}
+                                    type="button"
+                                    onClick={() => setPreviewVersions((current) => ({ ...current, [item.id]: version.version }))}
+                                    className={`rounded-xl border p-4 text-left ${previewVersion === version.version ? "border-green-300 bg-green-400/10" : "border-white/10 bg-black/20"}`}
+                                  >
+                                    <span className="font-black text-white">Version {version.version} · {formatLabel(version.changeType)}</span>
+                                    <span className="mt-1 block text-sm text-gray-300">{version.request}</span>
+                                    <span className="mt-1 block text-xs text-gray-500">{version.platform}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          {preview ? (
+                            <div>
+                              <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Approve This Version By Platform</p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {platforms.map((platform) => {
+                                  const lower = platform.toLowerCase();
+                                  const key = lower.includes("youtube") ? "youtube" : lower.includes("tiktok") ? "tiktok" : lower.includes("instagram") ? "instagram" : lower.includes("facebook") ? "facebook" : lower;
+                                  const locked = item.platformApprovals?.[key]?.version === preview.version;
+                                  return (
+                                    <button
+                                      key={`${item.id}-${key}-${preview.version}`}
+                                      type="button"
+                                      onClick={() => approvePlatformVersion(item, key, preview.version)}
+                                      className={`rounded-xl border px-4 py-2 text-sm font-bold ${locked ? "border-green-300 bg-green-400/20 text-green-100" : "border-cyan-400/30 bg-cyan-400/10 text-cyan-100"}`}
+                                    >
+                                      {locked ? `Version ${preview.version} locked for ${platform}` : `Approve Version ${preview.version} for ${platform}`}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : null}
+                        </>
+                      ) : null}
                       <ReviewBlock
                         label="Opening Text"
                         value={item.videoPlan?.openingText}
@@ -333,13 +560,26 @@ export default function ReviewPage() {
 
                   <button
                     type="button"
+                    onClick={() => editItem(item)}
                     className="rounded-xl border border-white/15 bg-white/5 px-5 py-3 font-bold text-white transition hover:bg-white/10"
                   >
                     Edit
                   </button>
 
+                  {item.videoProduction ? (
+                    <button
+                      type="button"
+                      onClick={() => reviseVideo(item)}
+                      disabled={revisingId === item.id}
+                      className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-5 py-3 font-bold text-cyan-100 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {revisingId === item.id ? "Revising Video..." : "Request Video Changes"}
+                    </button>
+                  ) : null}
+
                   <button
                     type="button"
+                    onClick={() => rejectItem(item.id)}
                     className="rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-3 font-bold text-red-200 transition hover:bg-red-500/20"
                   >
                     Reject

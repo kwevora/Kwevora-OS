@@ -1,13 +1,14 @@
+import os
+import re
 import sys
 from pathlib import Path
 
-import numpy as np
-import soundfile as sf
-from kokoro import KPipeline
+import torch
+import torchaudio as ta
+from chatterbox.tts import ChatterboxTTS
 
 
-SAMPLE_RATE = 24000
-DEFAULT_VOICE = "af_heart"
+MAX_CHUNK_CHARACTERS = 230
 
 
 def generate_voice(
@@ -27,43 +28,47 @@ def generate_voice(
         exist_ok=True,
     )
 
-    pipeline = KPipeline(
-        lang_code="a",
-    )
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = ChatterboxTTS.from_pretrained(device=device)
+    reference_path = os.getenv("KAI_VOICE_REFERENCE", "").strip()
+    audio_prompt_path = reference_path if reference_path and Path(reference_path).is_file() else None
 
-    generator = pipeline(
-        cleaned_text,
-        voice=DEFAULT_VOICE,
-        speed=1.0,
-    )
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", cleaned_text) if part.strip()]
+    chunks: list[str] = []
+    current = ""
+    for sentence in sentences:
+        candidate = f"{current} {sentence}".strip()
+        if current and len(candidate) > MAX_CHUNK_CHARACTERS:
+            chunks.append(current)
+            current = sentence
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
 
-    audio_segments: list[np.ndarray] = []
-
-    for _graphemes, _phonemes, audio in generator:
-        audio_segments.append(
-            np.asarray(
-                audio,
-                dtype=np.float32,
-            )
-        )
+    audio_segments: list[torch.Tensor] = []
+    pause = torch.zeros(1, int(model.sr * 0.16), dtype=torch.float32)
+    for index, chunk in enumerate(chunks):
+        audio = model.generate(
+            chunk,
+            audio_prompt_path=audio_prompt_path,
+            exaggeration=0.62,
+            cfg_weight=0.35,
+        ).detach().cpu()
+        audio_segments.append(audio)
+        if index < len(chunks) - 1:
+            audio_segments.append(pause)
 
     if not audio_segments:
         raise RuntimeError(
-            "Kokoro did not generate any audio."
+            "Chatterbox did not generate any audio."
         )
 
-    finished_audio = np.concatenate(
-        audio_segments
-    )
-
-    sf.write(
-        destination,
-        finished_audio,
-        SAMPLE_RATE,
-    )
+    finished_audio = torch.cat(audio_segments, dim=-1)
+    ta.save(str(destination), finished_audio, model.sr)
 
     print(
-        f"KAI_VOICE_RESULT={destination.as_posix()}"
+        f"KAI_VOICE_RESULT={destination.as_posix()} device={device} engine=chatterbox"
     )
 
 
