@@ -497,7 +497,7 @@ Hard rules:
 - This is a SPOKEN human story, not a slideshow and not a text presentation.
 - Open on a disruptive, specific, conversational line in under 2 seconds. No greeting.
 - Return exactly 8 scenes.
-- Write one continuous natural voiceover of 65-95 words across those 8 scenes.
+- Write one continuous natural voiceover of 72-86 words across those 8 scenes. Keep each scene to roughly 6-11 spoken words; never exceed 11 words in one scene.
 - The spoken narration must clearly say the exact product name "${productNameForNarration}" at least once.
 - End with this direct action in natural language: "Click the link to get ${productNameForNarration}."
 - Do not include the creator username or seller attribution when speaking the product name.
