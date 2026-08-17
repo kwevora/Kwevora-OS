@@ -227,7 +227,7 @@ export async function generateMotionScenes(input: {
       const openArt = await generateOpenArtVideo({
         accessToken: input.openArtAccessToken,
         prompt: openArtPrompt,
-        productAssetUrl: input.productAssetUrls?.find((url) => /^https?:\\/\\//i.test(url)),
+        productAssetUrl: input.productAssetUrls?.find(\n          (url) => url.startsWith("https://") || url.startsWith("http://"),\n        ),
       });
 
       if (openArt.success) {
