@@ -718,12 +718,26 @@ export async function produceVideo(
         failures: [motionFailure],
       };
     }
-    const stockSceneCount = motion.scenes.filter(
+    const contextScenes = motion.scenes.filter(
       (scene) => scene.metadata?.productProof !== true,
+    );
+    const incompleteContextScenes = contextScenes.filter(
+      (scene) =>
+        !scene.videoUrl &&
+        scene.metadata?.designedFacelessMotion !== true,
+    );
+    if (incompleteContextScenes.length > 0) {
+      throw new Error(
+        `KAI could not create verified motion for ${incompleteContextScenes.length} context scene(s).`,
+      );
+    }
+    const designedMotionCount = contextScenes.filter(
+      (scene) => scene.metadata?.designedFacelessMotion === true,
     ).length;
-    const allStockScenesHaveMotion = stockSceneCount === 0 || motion.generated === stockSceneCount;
-    if (!allStockScenesHaveMotion) throw new Error("KAI did not generate genuine motion for every context scene.");
-    logger(`Original stock-motion coverage: ${motion.generated}/${stockSceneCount} context scenes; ${scenes.length - stockSceneCount} real product-proof scenes.`);
+    const realMotionCount = contextScenes.length - designedMotionCount;
+    logger(
+      `Verified context motion: ${realMotionCount} real-footage/presenter scene(s) and ${designedMotionCount} KAI-designed Remotion scene(s); ${motion.scenes.length - contextScenes.length} real product-proof scene(s).`,
+    );
 
     const scenesWithVoice = motion.scenes.map((scene) => ({
       ...scene,
