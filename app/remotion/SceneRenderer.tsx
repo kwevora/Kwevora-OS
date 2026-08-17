@@ -514,6 +514,75 @@ function getAtmosphere(scene: VideoScene) {
   };
 }
 
+function FacelessMotionLayer({ scene, localFrame, sceneDuration, width, height }: {
+  scene: VideoScene;
+  localFrame: number;
+  sceneDuration: number;
+  width: number;
+  height: number;
+}) {
+  const treatment = String(scene.metadata?.visualTreatment ?? "");
+  const organized = /organization|workflow|publishing|outcome|conversion/.test(treatment);
+  const travel = interpolate(localFrame, [0, sceneDuration], [-90, 90], clamp);
+  const settle = interpolate(localFrame, [0, Math.max(12, sceneDuration * 0.55), sceneDuration], [0, organized ? 1 : 0.25, 1], clamp);
+  const labels = organized ? ["PLAN", "CREATE", "PUBLISH"] : ["IDEAS", "CAPTIONS", "DEADLINES"];
+  const accent = organized ? "#6EF7C8" : "#FF7A9E";
+
+  return (
+    <AbsoluteFill style={{ background: "linear-gradient(145deg, #09131D 0%, #111025 46%, #05060B 100%)", overflow: "hidden" }}>
+      <AbsoluteFill style={{
+        opacity: 0.28,
+        backgroundImage: "linear-gradient(rgba(119,235,255,0.13) 1px, transparent 1px), linear-gradient(90deg, rgba(119,235,255,0.13) 1px, transparent 1px)",
+        backgroundSize: "72px 72px",
+        transform: `translate3d(${travel * 0.18}px, ${travel * -0.12}px, 0) scale(1.12)`,
+      }} />
+      {[0, 1, 2].map((index) => {
+        const direction = index % 2 === 0 ? 1 : -1;
+        const x = organized ? 110 + index * 285 : 90 + index * 300 + direction * Math.sin(localFrame / 13 + index) * 34;
+        const y = organized ? 500 + index * 170 : 360 + index * 250 + Math.cos(localFrame / 11 + index) * 52;
+        const rotation = organized ? interpolate(settle, [0, 1], [direction * 8, 0], clamp) : direction * (5 + Math.sin(localFrame / 17 + index) * 3);
+        return (
+          <div key={labels[index]} style={{
+            position: "absolute", left: x, top: y, width: 330, minHeight: 205,
+            padding: "28px 30px", borderRadius: 30,
+            border: `2px solid ${index === 1 ? accent : "rgba(255,255,255,0.2)"}`,
+            background: index === 1 ? "linear-gradient(145deg, rgba(112,74,255,0.88), rgba(36,23,89,0.94))" : "linear-gradient(145deg, rgba(24,34,51,0.96), rgba(10,14,23,0.97))",
+            boxShadow: "0 30px 85px rgba(0,0,0,0.55)",
+            transform: `translate3d(${direction * travel * (organized ? 0.12 : 0.42)}px,0,0) rotate(${rotation}deg) scale(${0.92 + settle * 0.08})`,
+          }}>
+            <div style={{ color: accent, fontSize: 24, fontWeight: 850, letterSpacing: 3 }}>{labels[index]}</div>
+            <div style={{ height: 18, marginTop: 25, borderRadius: 99, background: "rgba(255,255,255,0.88)", width: index === 1 ? "82%" : "64%" }} />
+            <div style={{ height: 13, marginTop: 18, borderRadius: 99, background: "rgba(255,255,255,0.26)", width: index === 0 ? "78%" : "58%" }} />
+            <div style={{ display: "flex", gap: 12, marginTop: 30, alignItems: "center" }}>
+              <div style={{ width: 34, height: 34, borderRadius: 11, background: accent, color: "#07110F", fontSize: 23, lineHeight: "34px", textAlign: "center", fontWeight: 900 }}>{organized ? "✓" : "!"}</div>
+              <div style={{ height: 12, borderRadius: 99, background: "rgba(255,255,255,0.38)", width: 150 }} />
+            </div>
+          </div>
+        );
+      })}
+      <div style={{
+        position: "absolute", left: width * 0.12, right: width * 0.12, bottom: height * 0.17,
+        height: 190, borderRadius: 38, padding: "30px 38px",
+        background: "linear-gradient(90deg, rgba(15,22,35,0.96), rgba(25,18,55,0.96))",
+        border: "2px solid rgba(126,238,255,0.32)",
+        boxShadow: "0 30px 100px rgba(0,0,0,0.62), 0 0 55px rgba(116,93,255,0.18)",
+        transform: `translateY(${interpolate(settle, [0, 1], [85, 0], clamp)}px)`,
+      }}>
+        <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
+          {[0, 1, 2, 3, 4].map((index) => (
+            <div key={index} style={{
+              flex: 1, height: 98, borderRadius: 22,
+              background: index <= Math.floor(settle * 4) ? `linear-gradient(160deg, ${accent}, #735CFF)` : "rgba(255,255,255,0.08)",
+              transform: `translateY(${Math.sin(localFrame / 9 + index) * (organized ? 2 : 9)}px)`,
+              opacity: 0.7 + index * 0.05,
+            }} />
+          ))}
+        </div>
+      </div>
+    </AbsoluteFill>
+  );
+}
+
 export default function SceneRenderer({
   scene,
   brand,
@@ -605,6 +674,7 @@ export default function SceneRenderer({
   const sceneVideoUrl = resolveSceneVideoUrl(scene.videoUrl);
   const isProductProof = scene.metadata?.productProof === true;
   const isCallToAction = scene.metadata?.scenePurpose === "call-to-action";
+  const isDesignedFacelessMotion = scene.metadata?.designedFacelessMotion === true;
   const destination = displayDestination(scene.metadata?.destination);
   const visibleHashtags = (scene.hashtags ?? [])
     .map((hashtag) => hashtag.startsWith("#") ? hashtag : `#${hashtag}`)
@@ -733,6 +803,8 @@ export default function SceneRenderer({
             </div>
           ) : null}
         </AbsoluteFill>
+      ) : isDesignedFacelessMotion ? (
+        <FacelessMotionLayer scene={scene} localFrame={localFrame} sceneDuration={sceneDuration} width={width} height={height} />
       ) : null}
 
       <div
