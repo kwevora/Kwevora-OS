@@ -57,9 +57,7 @@ export default function LiveAIGenerator() {
 
         const data = (await response.json()) as YouTubeStatus;
         setStatus(data);
-      } catch (error) {
-        console.error("YouTube status error:", error);
-
+      } catch {
         setStatus({
           connected: false,
           channelId: "",
