@@ -202,17 +202,22 @@ function repairDirection(
     repairedScenes[3].narration = `${spokenProductName(input.productName)} gives you ${input.offerDescription}. ${clean(repairedScenes[3].narration)}`;
   }
 
-  let totalWords = words(
-    repairedScenes.map((scene) => clean(scene.narration)).join(" "),
-  ).length;
-  if (totalWords < 55) {
+  // The validator requires 65-95 spoken words. Repair to the same floor
+  // before validation so KAI cannot repeatedly reject its own corrected script.
+  const narrationWordCount = () =>
+    words(repairedScenes.map((scene) => clean(scene.narration)).join(" ")).length;
+
+  let totalWords = narrationWordCount();
+  if (totalWords < 65) {
     repairedScenes[6].narration = `${clean(repairedScenes[6].narration)} ${input.offerDescription}`.trim();
-    totalWords = words(
-      repairedScenes.map((scene) => clean(scene.narration)).join(" "),
-    ).length;
+    totalWords = narrationWordCount();
   }
-  if (totalWords < 55) {
+  if (totalWords < 65) {
     repairedScenes[7].narration = `${clean(repairedScenes[7].narration)} See the complete product at the link and decide whether it fits the way you create content.`.trim();
+    totalWords = narrationWordCount();
+  }
+  if (totalWords < 65) {
+    repairedScenes[5].narration = `${clean(repairedScenes[5].narration)} Watch the product in use, notice the specific result, and compare that outcome with the problem shown at the beginning.`.trim();
   }
 
   return {
