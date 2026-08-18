@@ -24,6 +24,9 @@ const KWEVORA_CONTENT_PLANNER_ASSETS = [
   "/product-assets/kwevora-content-planner/dashboard.jpg",
   "/product-assets/kwevora-content-planner/calendar.jpg",
   "/product-assets/kwevora-content-planner/ideas.jpg",
+  "/product-assets/kwevora-content-planner/human-hook.png",
+  "/product-assets/kwevora-content-planner/human-demo.png",
+  "/product-assets/kwevora-content-planner/human-results.png",
 ] as const;
 
 function normalizeText(value: string | undefined, fallback = "") {
@@ -39,8 +42,8 @@ function getErrorMessage(error: unknown) {
 
 function resolveProductAssets(productName: string, requested?: string[]) {
   const supplied = (requested ?? []).map((asset) => asset.trim()).filter(Boolean);
-  if (supplied.length >= 4) return supplied;
   if (/kwevora\s+content\s+planner/i.test(productName)) return [...KWEVORA_CONTENT_PLANNER_ASSETS];
+  if (supplied.length >= 4) return supplied;
   return supplied;
 }
 
