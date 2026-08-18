@@ -12,7 +12,6 @@ import { directVideoMusic } from "./MusicDirector";
 import { directVideoPresenter } from "./PresenterDirector";
 import { directVideoVoice } from "./VoiceDirector";
 import { generatePlannedVoice } from "./VoiceGenerationService";
-import { generatePresenterVideo } from "./PresenterVideoEngine";
 import {
   directCinematicScene,
   type CinematicBlueprint,
@@ -20,7 +19,7 @@ import {
 import { directAdaptiveVideo } from "./AdaptiveVideoDirector";
 import { generateMotionScenes } from "./MotionVideoGenerationService";
 import { generateLocalSoundtrack } from "./LocalSoundtrackService";
-import { enforcePremiumVideoQuality } from "./VideoQualityGate";
+import { enforcePremiumVideoQuality, repairPremiumVideoPackage } from "./VideoQualityGate";
 import { directGenerativeVideo } from "./KaiGenerativeVideoDirector";
 
 import type { KaiCreativeScene } from "../kaiCreativeDirector";
@@ -639,59 +638,15 @@ export async function produceVideo(
     }
     logger(`Chatterbox narration generated: ${voiceGeneration.audioUrl}.`);
 
-    const presenterGeneration = await generatePresenterVideo({
-      videoId,
-      presenter: {
-        ...presenterDirection,
-        presenterAudioUrl: voiceGeneration.audioUrl,
-        status: "planned",
-      },
-    });
+    logger("Faceless production mode selected; KAI will not generate a presenter.");
 
-    if (presenterGeneration.success) {
-      logger(`Presenter generated: ${presenterGeneration.videoUrl}.`);
-    } else {
-      logger(`Presenter waiting: ${presenterGeneration.message}`);
-    }
+    const finalPresenter = {
+      ...presenterDirection,
+      presenterAudioUrl: voiceGeneration.audioUrl,
+      status: "planned" as const,
+    };
 
-    const finalPresenter = presenterGeneration.success
-      ? presenterGeneration.presenter
-      : {
-          ...presenterDirection,
-          presenterAudioUrl: voiceGeneration.audioUrl,
-          status: "planned" as const,
-        };
-
-    const presenterSceneIndexes = new Set([0, scenes.length - 1]);
-    const scenesForMotion = presenterGeneration.success && presenterGeneration.videoUrl
-      ? scenes.map((scene, index) => {
-          if (!presenterSceneIndexes.has(index)) return scene;
-
-          const clipStartFrame = scenes
-            .slice(0, index)
-            .reduce((total, previous) => total + previous.durationInFrames, 0);
-
-          return {
-            ...scene,
-            imageUrl: undefined,
-            videoUrl: presenterGeneration.videoUrl,
-            presenterVideoUrl: presenterGeneration.videoUrl,
-            metadata: {
-              ...scene.metadata,
-              visualSource: "ai-presenter",
-              productProof: false,
-              presenterGenerated: true,
-              motionGenerated: true,
-              motionProvider: "SadTalker + MuseTalk 1.5",
-              motionSelectedByKai: true,
-              mediaClipStartFrame: clipStartFrame,
-              footageQuery: index === 0
-                ? "AI presenter delivers the immediate hook"
-                : "AI presenter delivers the direct call to action",
-            },
-          };
-        })
-      : scenes;
+    const scenesForMotion = scenes;
 
     logger("KAI is selecting fresh, commercially usable vertical motion footage.");
     let motion;
@@ -816,10 +771,12 @@ export async function produceVideo(
     productionPackage = {
       ...productionPackage,
       estimatedLengthSeconds: Math.ceil(voiceGeneration.durationSeconds + 1.25),
-      scenes: fitScenesToNarration(
-        productionPackage.scenes,
-        voiceGeneration.durationSeconds,
-      ),
+      scenes: repairPremiumVideoPackage({
+        scenes: fitScenesToNarration(
+          productionPackage.scenes,
+          voiceGeneration.durationSeconds,
+        ),
+      }),
     };
 
     enforcePremiumVideoQuality({

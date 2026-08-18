@@ -4,6 +4,83 @@ const INTERNAL_COPY = [/\bproduct\s*:/i, /\baudience\s*:/i, /\bcreative directio
 const REJECTED_TEMPLATE_COPY = [/stop juggling your content/i, /scattered ideas kill consistency/i, /content shouldn't feel this hard/i, /one planner.*every campaign/i, /organizes it all/i, /plan.*schedule.*publish/i, /create with clarity/i, /get the planner/i];
 const wordCount = (value?: string) => value?.trim().split(/\s+/).filter(Boolean).length ?? 0;
 
+
+const truncateWords = (value: string | undefined, maximum: number) =>
+  (value ?? "").trim().split(/\s+/).filter(Boolean).slice(0, maximum).join(" ");
+
+const DESIGNED_MOTION_TREATMENTS = [
+  "scattered-content-cards",
+  "deadline-pressure",
+  "idea-overload",
+  "workflow-build",
+  "calendar-organization",
+  "publishing-momentum",
+  "outcome-proof",
+  "link-conversion",
+] as const;
+
+const DEFAULT_HASHTAGS = ["#KWEVORA", "#ContentPlanner", "#ContentCreator"];
+
+export function repairPremiumVideoPackage(input: { scenes: VideoScene[] }): VideoScene[] {
+  let visibleHeadlineCount = 0;
+
+  return input.scenes.map((scene, index) => {
+    const purpose = String(scene.metadata?.scenePurpose ?? "");
+    const isProductProof = scene.metadata?.productProof === true;
+    const isCallToAction = purpose === "call-to-action";
+    const shouldShowHeadline =
+      isCallToAction ||
+      (["hook", "solution"].includes(purpose) && visibleHeadlineCount < 2);
+
+    if (shouldShowHeadline && !isCallToAction) visibleHeadlineCount += 1;
+
+    const narrationFallback = isCallToAction
+      ? "Click the link to get the KWEVORA Content Planner and start planning with clarity."
+      : "See how a clear content workflow turns scattered ideas into an organized publishing plan.";
+    const narration =
+      wordCount(scene.narration) >= 4 ? scene.narration : narrationFallback;
+    const visualTreatment =
+      DESIGNED_MOTION_TREATMENTS[index % DESIGNED_MOTION_TREATMENTS.length];
+    const requiresDesignedMotion =
+      !isProductProof && !scene.videoUrl;
+    const existingQuery = String(scene.metadata?.footageQuery ?? "").trim();
+    const hashtags = isCallToAction
+      ? [...new Set([...(scene.hashtags ?? []), ...DEFAULT_HASHTAGS])].slice(0, 8)
+      : scene.hashtags;
+
+    return {
+      ...scene,
+      text: isCallToAction
+        ? "Click the link to get it"
+        : shouldShowHeadline
+          ? truncateWords(scene.text || narration, 7)
+          : "",
+      supportingText: "",
+      narration,
+      imageUrl: requiresDesignedMotion ? undefined : scene.imageUrl,
+      cameraMovement: isProductProof
+        ? (["slow-push-in", "pan-left", "pan-right"] as const)[index % 3]
+        : scene.cameraMovement,
+      hashtags,
+      metadata: {
+        ...scene.metadata,
+        ...(requiresDesignedMotion
+          ? {
+              visualSource: "designed-faceless-motion",
+              visualTreatment,
+              designedFacelessMotion: true,
+              motionProvider: "KAI Remotion faceless ad system",
+              motionGenerated: true,
+              motionSelectedByKai: true,
+              productProof: false,
+            }
+          : {}),
+        footageQuery: `${existingQuery || `faceless ${visualTreatment}`} scene ${index + 1}`,
+      },
+    };
+  });
+}
+
 export function enforcePremiumVideoQuality(input: { scenes: VideoScene[]; music?: VideoAudioTrack; narrationDurationSeconds?: number }) {
   const failures: string[] = [];
   if (input.scenes.length < 4) failures.push("The campaign needs at least four directed scenes.");
