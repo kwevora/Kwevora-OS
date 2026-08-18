@@ -32,13 +32,13 @@ type SceneDefinition = {
 };
 
 const DEFINITIONS: SceneDefinition[] = [
-  { purpose: "hook", headline: "Still planning in scattered notes?", narration: "Planning content in scattered notes?", durationInFrames: 75, cameraShot: "close-up", cameraMovement: "push-in", transition: "hard-cut", visual: "Fast-moving scattered content cards resolve into one organized system." },
+  { purpose: "hook", headline: "Still guessing what to post?", narration: "Still planning content in scattered notes?", durationInFrames: 75, assetIndex: 4, cameraShot: "close-up", cameraMovement: "push-in", transition: "hard-cut", visual: "Show the approved overwhelmed creator surrounded by scattered content tasks while the real KWEVORA planner remains visible." },
   { purpose: "solution", headline: "One system. Every post.", narration: "Meet KWEVORA—one clear system for every post.", durationInFrames: 90, assetIndex: 0, cameraShot: "wide", cameraMovement: "slow-push-in", transition: "zoom-through", visual: "Reveal the real KWEVORA Content Planner product overview." },
-  { purpose: "demonstration", headline: "", narration: "Set goals, audience, platforms, and notes together.", durationInFrames: 105, assetIndex: 1, cameraShot: "detail", cameraMovement: "pan-right", transition: "slide-left", visual: "Demonstrate the real planner dashboard and its organization controls." },
+  { purpose: "demonstration", headline: "Plan it. Track it. Publish it.", narration: "Set goals, audience, platforms, and notes together.", durationInFrames: 105, assetIndex: 5, cameraShot: "detail", cameraMovement: "pan-right", transition: "slide-left", visual: "Show the approved creator actively using the real KWEVORA planner while preparing a social post." },
   { purpose: "demonstration", headline: "", narration: "See every post before deadlines sneak up.", durationInFrames: 105, assetIndex: 2, cameraShot: "detail", cameraMovement: "pan-left", transition: "slide-right", visual: "Demonstrate the real monthly calendar view." },
   { purpose: "demonstration", headline: "", narration: "Keep ideas, files, captions, and details together.", durationInFrames: 105, assetIndex: 3, cameraShot: "detail", cameraMovement: "slow-push-in", transition: "punch", visual: "Demonstrate the real content ideas database and its working fields." },
   { purpose: "demonstration", headline: "", narration: "Move content from idea to scheduled and published.", durationInFrames: 105, assetIndex: 1, cameraShot: "medium", cameraMovement: "pan-left", transition: "cross-dissolve", visual: "Show the real workflow tabs and publishing progression." },
-  { purpose: "outcome", headline: "More creating. Less searching.", narration: "Spend less time searching. Create more.", durationInFrames: 90, assetIndex: 2, cameraShot: "wide", cameraMovement: "slow-pull-out", transition: "zoom", visual: "Return to the real calendar as the organized outcome." },
+  { purpose: "outcome", headline: "Create with clarity. Post with confidence.", narration: "Spend less time searching. Create more.", durationInFrames: 90, assetIndex: 6, cameraShot: "wide", cameraMovement: "slow-pull-out", transition: "zoom", visual: "Show the approved creators confidently using KWEVORA with scheduled content visible." },
   { purpose: "call-to-action", headline: "Click the link to get it", narration: "Click the link to get the KWEVORA Content Planner.", durationInFrames: 225, assetIndex: 0, cameraShot: "wide", cameraMovement: "slow-push-in", transition: "fade", visual: "Hold on the real product while the Stan Store destination and hashtags remain readable." },
 ];
 
@@ -47,8 +47,8 @@ function isVideoAsset(url: string) {
 }
 
 function assertTemplateContract(input: TemplateInput) {
-  if (input.productAssetUrls.length < 4) {
-    throw new Error("The proven KWEVORA ad template requires the hero, dashboard, calendar, and ideas product images.");
+  if (input.productAssetUrls.length < 7) {
+    throw new Error("The proven KWEVORA ad template requires four real planner images and three approved human-context scenes.");
   }
   if (!/^https?:\/\//i.test(input.destination)) {
     throw new Error("The proven ad template requires the public Stan Store product link.");
@@ -66,6 +66,7 @@ export function buildProvenProductAdTemplate(input: TemplateInput): VideoProduct
     const productProof = Boolean(productAssetUrl);
     const productAssetIsVideo = productAssetUrl ? isVideoAsset(productAssetUrl) : false;
     const designedHook = index === 0;
+    const humanContext = definition.assetIndex !== undefined && definition.assetIndex >= 4;
 
     return {
       id: `${input.videoId}-template-scene-${index + 1}`,
@@ -101,14 +102,15 @@ export function buildProvenProductAdTemplate(input: TemplateInput): VideoProduct
         templateId: "kwevora-planner-proof-v1",
         templateLocked: true,
         scenePurpose: definition.purpose,
-        visualSource: productProof ? "product" : "designed-faceless-motion",
+        visualSource: humanContext ? "approved-human-context" : productProof ? "product" : "designed-faceless-motion",
         productProof,
+        approvedHumanContext: humanContext,
         productAssetUrl,
         productAssetIndex: definition.assetIndex,
         designedFacelessMotion: designedHook,
         visualTreatment: designedHook ? "scattered-content-cards" : undefined,
-        motionProvider: designedHook ? "KAI Remotion template" : "truthful product asset",
-        motionGenerated: designedHook,
+        motionProvider: humanContext ? "approved KWEVORA Canva scene" : "truthful product asset",
+        motionGenerated: false,
         footageQuery: `locked-template-${index + 1}-${definition.purpose}`,
         destination: input.destination,
         narrationEndBufferSeconds: 2,
@@ -139,11 +141,13 @@ export function validateProvenProductAdTemplate(productionPackage: VideoProducti
   const failures: string[] = [];
   const totalFrames = productionPackage.scenes.reduce((total, scene) => total + scene.durationInFrames, 0);
   const productAssets = new Set(productionPackage.scenes.filter((scene) => scene.metadata?.productProof === true).map((scene) => String(scene.metadata?.productAssetUrl ?? "")).filter(Boolean));
+  const humanContextScenes = productionPackage.scenes.filter((scene) => scene.metadata?.approvedHumanContext === true);
   const finalScene = productionPackage.scenes.at(-1);
 
   if (productionPackage.scenes.length !== 8) failures.push("The ad must contain exactly eight template scenes.");
   if (totalFrames !== TOTAL_FRAMES) failures.push("The ad must be exactly 30 seconds.");
-  if (productAssets.size < 4) failures.push("All four real planner assets must appear in the ad.");
+  if (productAssets.size < 7) failures.push("All four real planner assets and all three approved human-context scenes must appear in the ad.");
+  if (humanContextScenes.length < 3) failures.push("The hook, demonstration, and results scenes must use the approved human-context visuals.");
   if (productionPackage.scenes.filter((scene) => scene.metadata?.productProof === true).length < 7) failures.push("Seven of eight scenes must visibly demonstrate the real product.");
   if (finalScene?.metadata?.scenePurpose !== "call-to-action") failures.push("The final scene must be the Stan Store CTA.");
   if (!/^https?:\/\//i.test(String(finalScene?.metadata?.destination ?? ""))) failures.push("The CTA must include the Stan Store URL.");
