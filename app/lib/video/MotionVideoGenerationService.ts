@@ -94,7 +94,10 @@ async function searchPexels(query: string, used: Set<string>): Promise<MotionCan
   url.searchParams.set("orientation", "portrait");
   url.searchParams.set("size", "medium");
   url.searchParams.set("per_page", "30");
-  const response = await fetch(url, { headers: { Authorization: key } });
+  const response = await fetch(url, {
+    headers: { Authorization: key },
+    signal: AbortSignal.timeout(8_000),
+  });
   if (response.status === 401 || response.status === 403) {
     throw new MotionFootageConfigurationError("Pexels rejected its saved API key.");
   }
@@ -137,7 +140,9 @@ async function searchPixabay(query: string, used: Set<string>): Promise<MotionCa
   url.searchParams.set("safesearch", "true");
   url.searchParams.set("editors_choice", "true");
   url.searchParams.set("per_page", "50");
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(8_000),
+  });
   if (response.status === 400 || response.status === 401 || response.status === 403) {
     throw new MotionFootageConfigurationError("Pixabay rejected its saved API key.");
   }
@@ -163,7 +168,9 @@ async function searchPixabay(query: string, used: Set<string>): Promise<MotionCa
 }
 
 async function downloadVideo(url: string, provider: string) {
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(20_000),
+  });
   if (!response.ok) throw new Error(`${provider} footage download returned ${response.status}.`);
   const bytes = Buffer.from(await response.arrayBuffer());
   if (bytes.length < 100_000) throw new Error(`${provider} returned an incomplete clip.`);
@@ -300,26 +307,36 @@ export async function generateMotionScenes(input: {
       .filter((word) => word.length > 2)
       .slice(0, 6)
       .join(" ");
-    const queries = [...new Set([humanContextQuery(scene, index), primaryQuery, fallbackQuery, "small business creator planning social media with phone"])]
-      .filter(Boolean);
-    input.logger?.(`Finding fresh vertical footage for scene ${index + 1}/${input.scenes.length}: ${primaryQuery}.`);
+    // Keep lookup bounded: a focused human-context query, a scene query,
+    // and one broad fallback. Pexels and Pixabay are queried concurrently so
+    // an unavailable provider cannot serially stall every scene.
+    const queries = [...new Set([
+      humanContextQuery(scene, index),
+      primaryQuery || fallbackQuery,
+      "small business creator planning social media with phone",
+    ])].filter(Boolean);
+    input.logger?.(`Finding fresh vertical footage for scene ${index + 1}/${input.scenes.length}: ${queries[0]}.`);
 
     let selected: MotionCandidate | undefined;
-    let selectedQuery = primaryQuery;
+    let selectedQuery = queries[0] ?? primaryQuery;
     const providerErrors: string[] = [];
     for (const query of queries) {
       const providers = index % 2 === 0
         ? [searchPexels, searchPixabay]
         : [searchPixabay, searchPexels];
-      for (const search of providers) {
-        try {
-          selected = await search(query, usedCandidates);
-        } catch (error) {
-          providerErrors.push(error instanceof Error ? error.message : "Footage provider failed.");
-        }
-        if (selected) {
+      const results = await Promise.allSettled(
+        providers.map((search) => search(query, usedCandidates)),
+      );
+      for (const result of results) {
+        if (result.status === "fulfilled" && result.value && !selected) {
+          selected = result.value;
           selectedQuery = query;
-          break;
+        } else if (result.status === "rejected") {
+          providerErrors.push(
+            result.reason instanceof Error
+              ? result.reason.message
+              : "Footage provider failed.",
+          );
         }
       }
       if (selected) break;
