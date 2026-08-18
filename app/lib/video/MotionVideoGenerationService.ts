@@ -54,6 +54,28 @@ function cleanQuery(scene: VideoScene, productName: string) {
   return [...new Set(words)].slice(0, 10).join(" ");
 }
 
+function humanContextQuery(scene: VideoScene, index: number) {
+  const purpose = String(scene.metadata?.scenePurpose ?? "").toLowerCase();
+  const purposefulQueries: Record<string, string> = {
+    hook: "frustrated content creator scrolling phone",
+    problem: "overwhelmed small business owner messy desk",
+    tension: "stressed creator planning social media",
+    solution: "confident creator organizing content calendar",
+    demonstration: "content creator working laptop planning",
+    proof: "happy entrepreneur checking social media results",
+    transformation: "relieved business owner productive workspace",
+    "call-to-action": "confident creator using phone smiling",
+  };
+
+  return purposefulQueries[purpose] ??
+    [
+      "small business creator working laptop",
+      "content creator filming social media",
+      "entrepreneur planning content calendar",
+      "creator using phone at desk",
+    ][index % 4];
+}
+
 function choosePexelsFile(video: PexelsVideo) {
   return (video.video_files ?? [])
     .filter((file) => file.file_type === "video/mp4" && file.height > file.width && file.height >= 960)
@@ -227,7 +249,9 @@ export async function generateMotionScenes(input: {
       const openArt = await generateOpenArtVideo({
         accessToken: input.openArtAccessToken,
         prompt: openArtPrompt,
-        productAssetUrl: input.productAssetUrls?.find(\n          (url) => url.startsWith("https://") || url.startsWith("http://"),\n        ),
+        productAssetUrl: input.productAssetUrls?.find(
+          (url) => url.startsWith("https://") || url.startsWith("http://"),
+        ),
       });
 
       if (openArt.success) {
@@ -276,7 +300,7 @@ export async function generateMotionScenes(input: {
       .filter((word) => word.length > 2)
       .slice(0, 6)
       .join(" ");
-    const queries = [...new Set([primaryQuery, fallbackQuery, "small business creator working"])]
+    const queries = [...new Set([humanContextQuery(scene, index), primaryQuery, fallbackQuery, "small business creator working"])]
       .filter(Boolean);
     input.logger?.(`Finding fresh vertical footage for scene ${index + 1}/${input.scenes.length}: ${primaryQuery}.`);
 
@@ -284,7 +308,10 @@ export async function generateMotionScenes(input: {
     let selectedQuery = primaryQuery;
     const providerErrors: string[] = [];
     for (const query of queries) {
-      for (const search of [searchPexels, searchPixabay]) {
+      const providers = index % 2 === 0
+        ? [searchPexels, searchPixabay]
+        : [searchPixabay, searchPexels];
+      for (const search of providers) {
         try {
           selected = await search(query, usedCandidates);
         } catch (error) {
