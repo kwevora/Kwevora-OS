@@ -61,7 +61,7 @@ function humanContextQuery(scene: VideoScene, index: number) {
     problem: "overwhelmed small business owner messy desk",
     tension: "stressed creator planning social media",
     solution: "confident creator organizing content calendar",
-    demonstration: "content creator working laptop planning",
+    demonstration: "creator organizing a social media calendar on a tablet",
     proof: "happy entrepreneur checking social media results",
     transformation: "relieved business owner productive workspace",
     "call-to-action": "confident creator using phone smiling",
@@ -69,10 +69,10 @@ function humanContextQuery(scene: VideoScene, index: number) {
 
   return purposefulQueries[purpose] ??
     [
-      "small business creator working laptop",
-      "content creator filming social media",
-      "entrepreneur planning content calendar",
-      "creator using phone at desk",
+      "small business creator organizing sticky notes",
+      "content creator filming social media on phone",
+      "entrepreneur planning a content calendar on tablet",
+      "creator reviewing a weekly schedule",
     ][index % 4];
 }
 
@@ -300,7 +300,7 @@ export async function generateMotionScenes(input: {
       .filter((word) => word.length > 2)
       .slice(0, 6)
       .join(" ");
-    const queries = [...new Set([humanContextQuery(scene, index), primaryQuery, fallbackQuery, "small business creator working"])]
+    const queries = [...new Set([humanContextQuery(scene, index), primaryQuery, fallbackQuery, "small business creator planning social media with phone"])]
       .filter(Boolean);
     input.logger?.(`Finding fresh vertical footage for scene ${index + 1}/${input.scenes.length}: ${primaryQuery}.`);
 
