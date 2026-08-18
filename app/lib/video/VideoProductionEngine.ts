@@ -32,6 +32,30 @@ import type {
   ProductionResult,
 } from "./productionTypes";
 
+const KWEVORA_CONTENT_PLANNER_ASSETS = [
+  "/product-assets/kwevora-content-planner/hero.png",
+  "/product-assets/kwevora-content-planner/dashboard.jpg",
+  "/product-assets/kwevora-content-planner/calendar.jpg",
+  "/product-assets/kwevora-content-planner/ideas.jpg",
+] as const;
+
+function resolveProductAssetUrls(
+  productName: string,
+  requestedAssets: string[] | undefined,
+): string[] {
+  const supplied = (requestedAssets ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (supplied.length > 0) return supplied;
+
+  if (/kwevora\s+content\s+planner/i.test(productName)) {
+    return [...KWEVORA_CONTENT_PLANNER_ASSETS];
+  }
+
+  return [];
+}
+
 const DEFAULT_OBJECTIVE =
   "Create useful content that builds trust and moves the viewer toward the next step.";
 
@@ -363,9 +387,10 @@ export async function produceVideo(
     request.audience,
     "creators and digital-product sellers who need a simpler way to plan and publish consistent content",
   );
-  const productAssetUrls = (request.productAssetUrls ?? [])
-    .map((value) => value.trim())
-    .filter(Boolean);
+  const productAssetUrls = resolveProductAssetUrls(
+    productName,
+    request.productAssetUrls,
+  );
   const approachDirection = request.creativeApproach
     ? APPROACH_DIRECTIONS[request.creativeApproach]
     : APPROACH_DIRECTIONS.emotional_story;
@@ -399,7 +424,7 @@ export async function produceVideo(
       success: false,
       videoId,
       stage: "planning",
-      message: "Upload product screenshots or a screen recording first. KAI will not create a product ad that does not show the real product.",
+      message: "Add truthful product screenshots or a screen recording before rendering this product ad.",
     };
   }
 
