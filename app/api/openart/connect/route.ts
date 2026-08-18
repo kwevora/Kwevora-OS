@@ -28,7 +28,9 @@ type ClientRegistration = {
 };
 
 function base64Url(value: Uint8Array | ArrayBuffer) {
-  return Buffer.from(value)
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+
+  return Buffer.from(bytes)
     .toString("base64")
     .replace(/\+/g, "-")
     .replace(/\//g, "_")

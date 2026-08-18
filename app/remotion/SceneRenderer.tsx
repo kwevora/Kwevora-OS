@@ -838,9 +838,25 @@ export default function SceneRenderer({
                 }),
           }}
         >
+          {isProductProof ? (
+            <Img
+              src={sceneImageUrl}
+              style={{
+                position: "absolute",
+                inset: "-8%",
+                width: "116%",
+                height: "116%",
+                objectFit: "cover",
+                filter: "blur(38px) saturate(1.25)",
+                opacity: 0.34,
+                transform: "scale(1.08)",
+              }}
+            />
+          ) : null}
           <Img
             src={sceneImageUrl}
             style={{
+              position: "relative",
               width: "100%",
               height: "100%",
               objectFit: isProductProof ? "contain" : "cover",
