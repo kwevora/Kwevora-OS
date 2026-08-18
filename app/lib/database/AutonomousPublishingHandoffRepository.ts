@@ -13,7 +13,43 @@ function parse(row: Row | null): AutonomousPublishingHandoff | null {
 }
 
 export class AutonomousPublishingHandoffRepository {
+  private initialization?: Promise<void>;
+
+  private async ensureTable() {
+    if (!this.initialization) {
+      this.initialization = (async () => {
+        await getDatabase()
+          .prepare(
+            `CREATE TABLE IF NOT EXISTS autonomous_publishing_handoffs (
+              id TEXT PRIMARY KEY,
+              publishingItemId TEXT NOT NULL,
+              executionPlanId TEXT NOT NULL,
+              platform TEXT NOT NULL,
+              status TEXT NOT NULL,
+              scheduledFor TEXT,
+              attempts INTEGER NOT NULL DEFAULT 0,
+              handoff TEXT NOT NULL,
+              createdAt TEXT NOT NULL,
+              updatedAt TEXT NOT NULL,
+              UNIQUE(publishingItemId, platform)
+            )`,
+          )
+          .run();
+      })();
+    }
+
+    try {
+      await this.initialization;
+    } catch (error) {
+      // Allow a later request to retry initialization after a transient D1
+      // failure instead of permanently poisoning this repository instance.
+      this.initialization = undefined;
+      throw error;
+    }
+  }
+
   async save(handoff: AutonomousPublishingHandoff) {
+    await this.ensureTable();
     const updatedAt = new Date().toISOString();
     const stored = { ...handoff, updatedAt };
     await getDatabase()
@@ -45,6 +81,7 @@ export class AutonomousPublishingHandoffRepository {
   }
 
   async forItemPlatform(publishingItemId: string, platform: string) {
+    await this.ensureTable();
     return parse(
       await getDatabase()
         .prepare(
@@ -56,6 +93,7 @@ export class AutonomousPublishingHandoffRepository {
   }
 
   async byId(id: string) {
+    await this.ensureTable();
     return parse(
       await getDatabase()
         .prepare(
@@ -67,6 +105,7 @@ export class AutonomousPublishingHandoffRepository {
   }
 
   async forItem(publishingItemId: string) {
+    await this.ensureTable();
     return (
       (
         await getDatabase()
@@ -82,6 +121,7 @@ export class AutonomousPublishingHandoffRepository {
   }
 
   async nextDue(now: string) {
+    await this.ensureTable();
     return parse(
       await getDatabase()
         .prepare(
@@ -97,6 +137,7 @@ export class AutonomousPublishingHandoffRepository {
   }
 
   async nextProcessing(platform?: string) {
+    await this.ensureTable();
     if (!platform) {
       return parse(
         await getDatabase()
@@ -121,6 +162,7 @@ export class AutonomousPublishingHandoffRepository {
   }
 
   async history(limit = 500) {
+    await this.ensureTable();
     const safe = Math.max(1, Math.min(2000, Math.floor(limit)));
     return (
       (
