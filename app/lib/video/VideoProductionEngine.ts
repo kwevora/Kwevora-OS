@@ -39,6 +39,10 @@ const KWEVORA_CONTENT_PLANNER_ASSETS = [
   "/product-assets/kwevora-content-planner/ideas.jpg",
 ] as const;
 
+function isKwevoraContentPlanner(productName: string): boolean {
+  return /kwevora\s+content\s+planner/i.test(productName);
+}
+
 function resolveProductAssetUrls(
   productName: string,
   requestedAssets: string[] | undefined,
@@ -47,13 +51,21 @@ function resolveProductAssetUrls(
     .map((value) => value.trim())
     .filter(Boolean);
 
-  if (supplied.length > 0) return supplied;
-
-  if (/kwevora\s+content\s+planner/i.test(productName)) {
-    return [...KWEVORA_CONTENT_PLANNER_ASSETS];
+  if (isKwevoraContentPlanner(productName)) {
+    // The published planner captures are the source of truth. Stan's public
+    // listing can expose an old generic laptop thumbnail as a supplied asset;
+    // never let that stale still replace the actual product demonstration.
+    // User-supplied motion footage remains useful after the verified captures.
+    const suppliedVideos = supplied.filter((url) =>
+      /\.(mp4|webm|mov)(?:\?.*)?$/i.test(url),
+    );
+    return [...new Set([
+      ...KWEVORA_CONTENT_PLANNER_ASSETS,
+      ...suppliedVideos,
+    ])];
   }
 
-  return [];
+  return supplied;
 }
 
 const DEFAULT_OBJECTIVE =
@@ -577,7 +589,7 @@ export async function produceVideo(
       mission.mission.reason,
     );
 
-    const scenes = createProductionScenes({
+    let scenes = createProductionScenes({
       videoId,
       productName,
       creativeScenes: selectedConcept.plan.scenes,
@@ -615,6 +627,13 @@ export async function produceVideo(
         })),
       },
     });
+
+    if (isKwevoraContentPlanner(productName)) {
+      scenes = createProductFirstFallback(scenes, productAssetUrls);
+      logger(
+        `Guaranteed real planner proof in ${scenes.filter((scene) => scene.metadata?.productProof === true).length}/${scenes.length} scenes.`,
+      );
+    }
 
     const presenterDirection = directVideoPresenter({
       topic,
@@ -682,7 +701,11 @@ export async function produceVideo(
         audience,
         creativeApproach: request.creativeApproach ?? "product_demonstration",
         productAssetUrls,
-        openArtAccessToken: request.openArtAccessToken,
+        // The planner's verified captures are better proof than a costly,
+        // slow synthetic clip. Keep its default campaign fully local/free.
+        openArtAccessToken: isKwevoraContentPlanner(productName)
+          ? undefined
+          : request.openArtAccessToken,
         scenes: scenesForMotion,
         logger,
       });
